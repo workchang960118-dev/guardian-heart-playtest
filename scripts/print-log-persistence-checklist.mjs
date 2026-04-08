@@ -1,0 +1,1 @@
+console.log(`Guardian Heart MVP｜9B 正式回合紀錄持久化檢查\n\n1. 確認已執行 supabase/migrations/0002_room_action_logs.sql\n2. 建房並完成至少 1 次正式 action\n3. 呼叫 /api/rooms/logs 應可拉到正式紀錄\n4. 房間頁「回合紀錄」應顯示持久化狀態\n5. action log 與 snapshot actionLog 應一致\n`);

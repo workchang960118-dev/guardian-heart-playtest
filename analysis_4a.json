@@ -1,0 +1,308 @@
+{
+  "seed": 20260326,
+  "runCount": 500,
+  "winRate": 0.924,
+  "failedCount": 38,
+  "failureReasonCounts": {
+    "sr_zero": 38
+  },
+  "firstDangerRoundDistribution": [
+    {
+      "value": 2,
+      "count": 9
+    },
+    {
+      "value": 3,
+      "count": 46
+    },
+    {
+      "value": 4,
+      "count": 60
+    },
+    {
+      "value": 5,
+      "count": 68
+    },
+    {
+      "value": 6,
+      "count": 150
+    },
+    {
+      "value": 7,
+      "count": 159
+    }
+  ],
+  "firstPressure6RoundDistribution": [
+    {
+      "value": 6,
+      "count": 176
+    },
+    {
+      "value": 7,
+      "count": 283
+    }
+  ],
+  "firstAxisBrinkCounts": {
+    "SR": 335,
+    "SP": 23,
+    "both": 1,
+    "none": 141
+  },
+  "avgFirstDangerRound": 5.587398373983739,
+  "avgFirstPressure6Round": 6.616557734204793,
+  "avgEndedRoundFailed": 5.657894736842105,
+  "taskDeclarationCounts": [
+    {
+      "key": "task_crisis_control",
+      "count": 499,
+      "share": 0.998
+    },
+    {
+      "key": "task_comfort_circle",
+      "count": 498,
+      "share": 0.996
+    },
+    {
+      "key": "task_neighborhood_relay",
+      "count": 455,
+      "share": 0.91
+    },
+    {
+      "key": "task_small_gathering_point",
+      "count": 415,
+      "share": 0.83
+    },
+    {
+      "key": "task_support_network_formed",
+      "count": 83,
+      "share": 0.166
+    }
+  ],
+  "preLossActionPresenceTop": [
+    {
+      "key": "end_turn",
+      "count": 38,
+      "share": 1
+    },
+    {
+      "key": "move",
+      "count": 38,
+      "share": 1
+    },
+    {
+      "key": "finalize_pending_loss",
+      "count": 36,
+      "share": 0.9473684210526315
+    },
+    {
+      "key": "play_action_card:card_focus_the_point",
+      "count": 27,
+      "share": 0.7105263157894737
+    },
+    {
+      "key": "use_station_or_shelter",
+      "count": 26,
+      "share": 0.6842105263157895
+    },
+    {
+      "key": "discard_cards",
+      "count": 25,
+      "share": 0.6578947368421053
+    },
+    {
+      "key": "invest_event:sr1_sp1",
+      "count": 24,
+      "share": 0.631578947368421
+    },
+    {
+      "key": "adjacent_help:SR",
+      "count": 23,
+      "share": 0.6052631578947368
+    },
+    {
+      "key": "invest_event:sr1_sp0",
+      "count": 23,
+      "share": 0.6052631578947368
+    },
+    {
+      "key": "play_action_card:card_same_tile_care",
+      "count": 22,
+      "share": 0.5789473684210527
+    },
+    {
+      "key": "play_action_card:card_hold_together",
+      "count": 22,
+      "share": 0.5789473684210527
+    },
+    {
+      "key": "declare_task:task_neighborhood_relay",
+      "count": 8,
+      "share": 0.21052631578947367
+    },
+    {
+      "key": "invest_event:sr0_sp1",
+      "count": 6,
+      "share": 0.15789473684210525
+    },
+    {
+      "key": "adjacent_help:SP",
+      "count": 6,
+      "share": 0.15789473684210525
+    },
+    {
+      "key": "declare_task:task_crisis_control",
+      "count": 3,
+      "share": 0.07894736842105263
+    }
+  ],
+  "preLossStrategicTop": [
+    {
+      "key": "move",
+      "count": 38,
+      "share": 1
+    },
+    {
+      "key": "play_action_card:card_focus_the_point",
+      "count": 27,
+      "share": 0.7105263157894737
+    },
+    {
+      "key": "use_station_or_shelter",
+      "count": 26,
+      "share": 0.6842105263157895
+    },
+    {
+      "key": "invest_event:sr1_sp1",
+      "count": 24,
+      "share": 0.631578947368421
+    },
+    {
+      "key": "adjacent_help:SR",
+      "count": 23,
+      "share": 0.6052631578947368
+    },
+    {
+      "key": "invest_event:sr1_sp0",
+      "count": 23,
+      "share": 0.6052631578947368
+    },
+    {
+      "key": "play_action_card:card_same_tile_care",
+      "count": 22,
+      "share": 0.5789473684210527
+    },
+    {
+      "key": "play_action_card:card_hold_together",
+      "count": 22,
+      "share": 0.5789473684210527
+    },
+    {
+      "key": "declare_task:task_neighborhood_relay",
+      "count": 8,
+      "share": 0.21052631578947367
+    },
+    {
+      "key": "invest_event:sr0_sp1",
+      "count": 6,
+      "share": 0.15789473684210525
+    },
+    {
+      "key": "adjacent_help:SP",
+      "count": 6,
+      "share": 0.15789473684210525
+    },
+    {
+      "key": "declare_task:task_crisis_control",
+      "count": 3,
+      "share": 0.07894736842105263
+    },
+    {
+      "key": "declare_task:task_small_gathering_point",
+      "count": 3,
+      "share": 0.07894736842105263
+    },
+    {
+      "key": "declare_task:task_comfort_circle",
+      "count": 2,
+      "share": 0.05263157894736842
+    },
+    {
+      "key": "declare_task:task_support_network_formed",
+      "count": 2,
+      "share": 0.05263157894736842
+    }
+  ],
+  "roundAverages": [
+    {
+      "round": 1,
+      "avgTotalSr": 14.524,
+      "avgTotalSp": 15.26,
+      "avgMinSr": 2.742,
+      "avgMinSp": 3.02,
+      "resolvedRate": 1,
+      "avgRiskCampers": 0,
+      "avgMovedIntoRisk": 0
+    },
+    {
+      "round": 2,
+      "avgTotalSr": 13.082,
+      "avgTotalSp": 14.844,
+      "avgMinSr": 2.504,
+      "avgMinSp": 3.086,
+      "resolvedRate": 1,
+      "avgRiskCampers": 0,
+      "avgMovedIntoRisk": 0
+    },
+    {
+      "round": 3,
+      "avgTotalSr": 11.953907815631263,
+      "avgTotalSp": 15.048096192384769,
+      "avgMinSr": 2.306613226452906,
+      "avgMinSp": 3.1282565130260522,
+      "resolvedRate": 1,
+      "avgRiskCampers": 0,
+      "avgMovedIntoRisk": 0
+    },
+    {
+      "round": 4,
+      "avgTotalSr": 11.322649572649572,
+      "avgTotalSp": 14.583333333333334,
+      "avgMinSr": 2.198717948717949,
+      "avgMinSp": 3.0405982905982905,
+      "resolvedRate": 1,
+      "avgRiskCampers": 0,
+      "avgMovedIntoRisk": 0
+    },
+    {
+      "round": 5,
+      "avgTotalSr": 10.578947368421053,
+      "avgTotalSp": 14.221491228070175,
+      "avgMinSr": 2.0241228070175437,
+      "avgMinSp": 2.914473684210526,
+      "resolvedRate": 1,
+      "avgRiskCampers": 0,
+      "avgMovedIntoRisk": 0
+    },
+    {
+      "round": 6,
+      "avgTotalSr": 9.869565217391305,
+      "avgTotalSp": 13.77345537757437,
+      "avgMinSr": 1.8787185354691076,
+      "avgMinSp": 2.796338672768879,
+      "resolvedRate": 1,
+      "avgRiskCampers": 0,
+      "avgMovedIntoRisk": 0
+    },
+    {
+      "round": 7,
+      "avgTotalSr": 9.205882352941176,
+      "avgTotalSp": 13.447963800904978,
+      "avgMinSr": 1.6742081447963801,
+      "avgMinSp": 2.6538461538461537,
+      "resolvedRate": 1,
+      "avgRiskCampers": 0,
+      "avgMovedIntoRisk": 0
+    }
+  ],
+  "avgMovedIntoRiskPerRound": 0
+}
