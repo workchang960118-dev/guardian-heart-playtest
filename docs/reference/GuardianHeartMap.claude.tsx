@@ -1,5 +1,5 @@
 import React from "react";
-import { CANONICAL_MAP_V1, axialToPixel, hexPoints, Tile } from "./map-layout-v1";
+import { CANONICAL_MAP_V1, axialToPixel, hexPoints, Tile } from "./map-layout-v1.claude";
 
 // ──────────── 顏色對照 ────────────
 const TILE_COLORS: Record<string, string> = {
@@ -106,10 +106,10 @@ const GuardianHeartMap: React.FC = () => {
       style={{ background: "transparent" }}
     >
       {/* 鄰接線（底層） */}
-      {CANONICAL_MAP_V1.tiles.map((tile) => {
+      {CANONICAL_MAP_V1.tiles.map((tile: Tile) => {
         const from = axialToPixel(tile.q, tile.r, HEX_SIZE);
-        return tile.neighbors.map((nId) => {
-          const nb = CANONICAL_MAP_V1.tiles.find((t) => t.id === nId);
+        return tile.neighbors.map((nId: string) => {
+          const nb = CANONICAL_MAP_V1.tiles.find((t: Tile) => t.id === nId);
           if (!nb || nb.id < tile.id) return null; // 避免重複繪製
           const to = axialToPixel(nb.q, nb.r, HEX_SIZE);
           return (
@@ -128,7 +128,7 @@ const GuardianHeartMap: React.FC = () => {
       })}
 
       {/* 六角格（上層） */}
-      {CANONICAL_MAP_V1.tiles.map((tile) => {
+      {CANONICAL_MAP_V1.tiles.map((tile: Tile) => {
         const { x, y } = axialToPixel(tile.q, tile.r, HEX_SIZE);
         return (
           <HexTile
