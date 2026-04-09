@@ -53,6 +53,23 @@ export async function findRoomByCode(params: {
   return (data as RoomRow | null) ?? null;
 }
 
+export async function listRecentRoomRows(params: {
+  client: SupabaseClient;
+  limit?: number;
+}): Promise<RoomRow[]> {
+  const { client, limit = 6 } = params;
+
+  const { data, error } = await client
+    .from("rooms")
+    .select("id, code, status, phase, round, version, created_at, updated_at")
+    .in("status", ["lobby", "in_progress"])
+    .order("updated_at", { ascending: false })
+    .limit(limit);
+
+  if (error) throw error;
+  return (data as RoomRow[]) ?? [];
+}
+
 export async function updateRoomVersionAndState(params: {
   client: SupabaseClient;
   roomId: string;

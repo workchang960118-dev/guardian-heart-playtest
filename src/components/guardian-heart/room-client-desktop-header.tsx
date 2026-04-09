@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { DesktopCardMetaStrip } from "@/components/guardian-heart/room-client-desktop-card-channels";
-import type { BadgeTone, CardChannelSection, CardMetaPill, CardReservedSlot } from "@/components/guardian-heart/room-client-desktop-types";
+import type { BadgeTone, CardChannelSection, CardMetaPill } from "@/components/guardian-heart/room-client-desktop-types";
 
 type MetricCard = {
   labelZh: string;
@@ -15,7 +15,6 @@ type Props = {
   eventPenaltyZh: string;
   eventMetaPills?: CardMetaPill[];
   eventChannelSections?: CardChannelSection[];
-  eventReservedSlots?: CardReservedSlot[];
   pressureValue: number;
   roundValueZh: string;
   remainingDaysZh?: string | null;
@@ -44,7 +43,7 @@ function toneClasses(tone: BadgeTone = "stone") {
   if (tone === "sky") return "border-sky-200 bg-sky-50 text-sky-700";
   if (tone === "amber") return "border-amber-200 bg-amber-50 text-amber-700";
   if (tone === "violet") return "border-violet-200 bg-violet-50 text-violet-700";
-  return "border-stone-200 bg-stone-50 text-stone-700";
+  return "border-[#D9DEC0] bg-[#FAFBF6] text-stone-700";
 }
 
 function MetricPill({ item }: { item: MetricCard }) {
@@ -121,8 +120,8 @@ function InvestHintPill() {
   return (
     <HoverBubble
       align="left"
-      content={"填入要投入的 SR / SP 後按下投入。\n若角色允許資源轉換，會在這裡出現切換按鈕。"}
-      label={<span className="rounded-full border border-amber-200 bg-white px-2 py-0.5 text-[9px] text-amber-700">操作提示</span>}
+      content={"填入 SR / SP 後按投入。\n若可轉換資源，這裡會出現切換按鈕。"}
+      label={<span className="rounded-full border border-[#C8D1A7] bg-white px-2 py-0.5 text-[9px] text-[#5E6B2C]">操作提示</span>}
     />
   );
 }
@@ -216,8 +215,8 @@ function InvestStepper({
   onChange: (value: number) => void;
 }) {
   return (
-    <label className="flex items-center gap-1 rounded-full border border-amber-200 bg-white px-2 py-1 text-[10px] text-stone-700">
-      <span className="font-semibold text-amber-900">{label}</span>
+    <label className="flex items-center gap-1 rounded-full border border-[#C8D1A7] bg-white px-2 py-1 text-[10px] text-stone-700">
+      <span className="font-semibold text-[#5E6B2C]">{label}</span>
       <input
         type="number"
         min={0}
@@ -238,7 +237,6 @@ export function DesktopSinglePageHeader(props: Props) {
     eventPenaltyZh,
     eventMetaPills = [],
     eventChannelSections = [],
-    eventReservedSlots = [],
     pressureValue,
     roundValueZh,
     remainingDaysZh,
@@ -264,14 +262,14 @@ export function DesktopSinglePageHeader(props: Props) {
         <div id="gh-guide-zone-event" className="min-w-0">
           <div className="flex flex-wrap items-center gap-2 text-[10px] text-stone-500">
             <span className="font-semibold uppercase tracking-[0.16em] text-[#5E6B2C]">本輪事件</span>
-            <span className="text-[16px] font-bold text-stone-950">{eventTitleZh}</span>
+            <span className="text-[15px] font-bold tracking-[-0.01em] text-stone-950">{eventTitleZh}</span>
             <InvestContributorPill count={investedContributorCount} namesZh={investedContributorNamesZh} />
           </div>
 
           {eventMetaPills.length > 0 ? <DesktopCardMetaStrip items={eventMetaPills} className="mt-1" /> : null}
 
           <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] leading-none text-stone-600">
-            <span className="rounded-full bg-stone-50 px-2 py-1 text-stone-700">解決 <span className="font-semibold text-stone-950">{eventRequirementZh}</span></span>
+            <span className="rounded-full bg-[#FAFBF6] px-2 py-1 text-stone-600">解決 <span className="font-semibold text-stone-900">{eventRequirementZh}</span></span>
             <span className="rounded-full bg-rose-50 px-2 py-1 text-rose-700">缺 <span className="font-semibold">{eventRemainingZh}</span></span>
           </div>
         </div>
@@ -281,16 +279,16 @@ export function DesktopSinglePageHeader(props: Props) {
           <CompactEventEffectCard titleZh="未解懲罰" bodyZh={eventPenaltyZh.replace(/^未解懲罰：/, "")} tone="amber" />
         </div>
 
-        <div className="flex flex-col justify-center gap-1 rounded-[16px] border border-amber-200 bg-amber-50 px-2 py-1.5">
+        <div className="flex flex-col justify-center gap-1 rounded-[16px] border border-[#D9DEC0] bg-[#F7FAEE] px-2 py-1.5">
           <div className="flex items-center gap-1.5">
-            <span className="text-[10px] font-semibold text-amber-900">投入</span>
+            <span className="text-[10px] font-semibold text-[#5E6B2C]">投入</span>
             <InvestStepper label="SR" value={investSr} onChange={onChangeInvestSr} />
             <InvestStepper label="SP" value={investSp} onChange={onChangeInvestSp} />
             <button
               type="button"
               disabled={!canQuickInvest || investDisabled}
               onClick={onInvest}
-              className="rounded-full bg-stone-900 px-3 py-1.5 text-[10px] font-semibold text-white disabled:opacity-40"
+              className="rounded-full bg-[#5E6B2C] px-3 py-1.5 text-[10px] font-semibold text-white disabled:opacity-40"
             >
               投入
             </button>

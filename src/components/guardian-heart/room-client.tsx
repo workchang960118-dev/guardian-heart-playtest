@@ -8,9 +8,6 @@ import { ACTION_CARD_DEFINITION_MAP } from "@/domain/guardian-heart/seeds/cards/
 import { GuardianHeartMapStage } from "@/components/guardian-heart/guardian-heart-map-stage";
 import { DesktopCardMetaStrip } from "@/components/guardian-heart/room-client-desktop-card-channels";
 import { DesktopSinglePageSurface } from "@/components/guardian-heart/room-client-desktop-surface";
-import { ACTION_DECK_PROFILE_MAP } from "@/domain/guardian-heart/seeds/cards/action-deck-profiles";
-import { EVENT_POOL_PROFILE_MAP } from "@/domain/guardian-heart/seeds/events/event-pool-profiles";
-import { TASK_POOL_PROFILE_MAP } from "@/domain/guardian-heart/seeds/tasks/task-pool-profiles";
 import { MINIMAL_MAP } from "@/domain/guardian-heart/seeds/map/minimal-map";
 import { areTilesSameOrAdjacent } from "@/domain/guardian-heart/helpers/map/tile-lookup";
 import { canRecoverResource } from "@/domain/guardian-heart/helpers/resources/resource-policy";
@@ -18,7 +15,7 @@ import type { ApiResponse } from "@/domain/guardian-heart/types/api";
 import type { GameSnapshot, MapTile, PlayerState, RoomPlayerSummary, RoomSummary, SeatId, TaskState, ViewerRole } from "@/domain/guardian-heart/types/game";
 import type { StateUpdatedPayload } from "@/domain/guardian-heart/types/realtime";
 import type { RoomAction } from "@/domain/guardian-heart/types/room-actions";
-import type { CardChannelSection, CardMetaPill, CardReservedSlot } from "@/components/guardian-heart/room-client-desktop-types";
+import type { CardChannelSection, CardMetaPill } from "@/components/guardian-heart/room-client-desktop-types";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -414,43 +411,15 @@ function formatEventTagZh(tag: string): string | null {
   return labelMap[tag] ?? null;
 }
 
-function buildReservedSlots(kind: "event" | "task" | "action"): CardReservedSlot[] {
-  if (kind === "event") {
-    return [
-      { key: "event-narrative", labelZh: "敘事層", statusZh: "可接事件前情與餘波" },
-      { key: "event-visual", labelZh: "卡面圖像", statusZh: "可接插圖與危機圖示" },
-      { key: "event-keyword", labelZh: "關鍵字", statusZh: "可接難度與機制標記" },
-    ];
-  }
-
-  if (kind === "task") {
-    return [
-      { key: "task-tier", labelZh: "任務階層", statusZh: "可接任務線與難度層" },
-      { key: "task-narrative", labelZh: "前情摘要", statusZh: "可接任務背景與 NPC 線" },
-      { key: "task-branch", labelZh: "完成後續", statusZh: "可接任務後續分支" },
-    ];
-  }
-
-  return [
-    { key: "action-rarity", labelZh: "卡片稀有度", statusZh: "可接稀有度與來源池" },
-    { key: "action-keyword", labelZh: "關鍵字", statusZh: "可接連動與限制標籤" },
-    { key: "action-visual", labelZh: "卡面演出", statusZh: "可接插圖與動態提示" },
-  ];
+function buildHandCardInstanceKey(cardId: string, index: number) {
+  return `${cardId}::${index}`;
 }
 
-function buildTaskCardMetaPills(task: TaskState, status: TaskSurfaceStatus): CardMetaPill[] {
-  return [
-    { key: `${task.taskId}-status`, labelZh: status.badgeZh, tone: status.tone },
-    { key: `${task.taskId}-window`, labelZh: "營火宣告", tone: "amber" },
-    { key: `${task.taskId}-reward`, labelZh: "完成後結算", tone: "emerald" },
-  ];
-}
-
-function buildTaskCardChannels(task: TaskState, status: TaskSurfaceStatus): CardChannelSection[] {
-  return [
-    { key: `${task.taskId}-rules`, titleZh: "正式規則", bodyZh: task.rulesTextZh, tone: "stone" },
-    { key: `${task.taskId}-flow`, titleZh: "宣告節點", bodyZh: status.canDeclare ? "目前已進入正式宣告窗口，可直接送出。" : status.reasonsZh[0] ?? status.summaryZh, tone: status.canDeclare ? "emerald" : "amber" },
-  ];
+function getInitialHandCardSelection(handCardIds: string[]) {
+  return {
+    cardId: "",
+    instanceKey: "",
+  };
 }
 
 function buildActionCardMetaPills(cardId: string): CardMetaPill[] {
@@ -494,13 +463,7 @@ function buildEventCardChannels(snapshot: GameSnapshot): CardChannelSection[] {
 }
 
 function buildEnvironmentPills(snapshot: GameSnapshot): CardMetaPill[] {
-  const eventPills = buildEventCardMetaPills(snapshot);
-  const reservedPills = buildReservedSlots("event").map((item) => ({
-    key: `env-${item.key}`,
-    labelZh: `${item.labelZh}：${item.statusZh}`,
-    tone: "stone" as const,
-  }));
-  return [...eventPills, ...reservedPills];
+  return buildEventCardMetaPills(snapshot);
 }
 
 function buildActionFeedbackState(params: {
@@ -704,7 +667,6 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
   const [data, setData] = useState<BootstrapData | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
   const [selectedRoleBySeat, setSelectedRoleBySeat] = useState<Record<string, string>>({
     P1: "merchant_guard",
     P2: "medic_apprentice",
@@ -723,16 +685,13 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
   const [selectedRangerAbilityMode, setSelectedRangerAbilityMode] = useState<"" | "use" | "skip">("");
   const [selectedMedicAbilityMode, setSelectedMedicAbilityMode] = useState<"" | "use" | "skip">("");
   const [selectedMessengerAbilityMode, setSelectedMessengerAbilityMode] = useState<"" | "use" | "skip">("");
-  const [selectedDiscardCardIds, setSelectedDiscardCardIds] = useState<string[]>([]);
   const [selectedTaskId, setSelectedTaskId] = useState("");
   const [selectedActionCardId, setSelectedActionCardId] = useState("");
+  const [selectedActionCardInstanceKey, setSelectedActionCardInstanceKey] = useState("");
   const [selectedCardTargetSeat, setSelectedCardTargetSeat] = useState<"" | SeatId>("");
   const [selectedCardTileId, setSelectedCardTileId] = useState("");
   const [selectedCardResourceType, setSelectedCardResourceType] = useState<"SR" | "SP">("SP");
   const [selectedCardTeammateResourceType, setSelectedCardTeammateResourceType] = useState<"SR" | "SP">("SP");
-  const [selectedCompanionMode, setSelectedCompanionMode] = useState<"prevent" | "comfort">("prevent");
-  const [selectedPreventResource, setSelectedPreventResource] = useState<"SR" | "SP">("SR");
-  const [syncStatusZh, setSyncStatusZh] = useState("同步狀態：已載入最新局面");
   const [persistedLogStatusZh, setPersistedLogStatusZh] = useState("正式回合紀錄尚未同步");
   const [mapActionFeedbackZh, setMapActionFeedbackZh] = useState<string | null>(null);
   const [latestActionFeedback, setLatestActionFeedback] = useState<ActionFeedbackState | null>(null);
@@ -752,6 +711,7 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
   const [showMobileActionFeedDrawer, setShowMobileActionFeedDrawer] = useState(false);
   const [showCenterBroadcast, setShowCenterBroadcast] = useState(false);
   const [showTurnToast, setShowTurnToast] = useState(false);
+  const [lobbyShareFeedbackZh, setLobbyShareFeedbackZh] = useState("");
   const [pulsePressure, setPulsePressure] = useState(false);
   const [pulseTaskRail, setPulseTaskRail] = useState(false);
   const [showNightTransitionModal, setShowNightTransitionModal] = useState(false);
@@ -761,11 +721,12 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
   const [guideDialogPlacement, setGuideDialogPlacement] = useState<{ top: number; left: number; width: number; maxHeight: string } | null>(null);
   const [pendingEventRevealKey, setPendingEventRevealKey] = useState<string | null>(null);
   const [dismissedCampfireTaskWindowKey, setDismissedCampfireTaskWindowKey] = useState("");
+  const isGuideOverlayActive = Boolean(openingOnboardingStep || showNewcomerGuideModal || personalGuideContextPrompt);
 
   const suggestedSimulationLinks = useMemo(() => {
     if (!data) return [] as Array<{ href: string; labelZh: string }>;
     const links: Array<{ href: string; labelZh: string }> = [];
-    links.push({ href: "/simulation?presetId=cap_mode_baseline", labelZh: data.snapshot.roomConfig.resourceCapMode === "uncapped" ? "比無上限 vs 有上限" : "回看資源上限比較" });
+    links.push({ href: "/simulation?presetId=cap_mode_baseline", labelZh: data.snapshot.roomConfig.resourceCapMode === "uncapped" ? "比較無上限與有上限" : "回看資源上限比較" });
     if (data.snapshot.roomConfig.actionDeckProfileId !== "core_baseline") {
       links.push({ href: "/simulation?presetId=action_profile_response", labelZh: "回看行動牌池差異" });
     }
@@ -792,6 +753,7 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
   const previousActiveSeatRef = useRef<SeatId | null>(null);
   const previousPhaseRef = useRef<GameSnapshot["phase"] | null>(null);
   const lastGuideScrollKeyRef = useRef("");
+  const lobbyShareFeedbackTimeoutRef = useRef<number | null>(null);
 
   const joinToken = searchParams.get("joinToken") ?? "";
   const displayName = searchParams.get("displayName") ?? "";
@@ -808,28 +770,62 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
 
   function clearSelectedActionCard() {
     setSelectedActionCardId("");
+    setSelectedActionCardInstanceKey("");
     setSelectedCardTargetSeat("");
     setSelectedCardTileId("");
     setSelectedCardResourceType("SP");
     setSelectedCardTeammateResourceType("SP");
   }
 
-  function toggleSelectedActionCard(cardId: string) {
-    setSelectedActionCardId((current) => {
-      const next = current === cardId ? "" : cardId;
-      if (next !== current) {
-        setSelectedCardTargetSeat("");
-        setSelectedCardTileId("");
-        setSelectedCardResourceType("SP");
-        setSelectedCardTeammateResourceType("SP");
-      }
-      return next;
-    });
+  function toggleSelectedActionCard(cardId: string, instanceKey: string = cardId) {
+    const shouldClear = selectedActionCardId === cardId && selectedActionCardInstanceKey === instanceKey;
+    if (shouldClear) {
+      clearSelectedActionCard();
+      return;
+    }
+    setSelectedActionCardId(cardId);
+    setSelectedActionCardInstanceKey(instanceKey);
+    setSelectedCardTargetSeat("");
+    setSelectedCardTileId("");
+    setSelectedCardResourceType("SP");
+    setSelectedCardTeammateResourceType("SP");
+  }
+
+  function setLobbyShareFeedback(messageZh: string) {
+    setLobbyShareFeedbackZh(messageZh);
+    if (typeof window === "undefined") return;
+    if (lobbyShareFeedbackTimeoutRef.current) {
+      window.clearTimeout(lobbyShareFeedbackTimeoutRef.current);
+    }
+    lobbyShareFeedbackTimeoutRef.current = window.setTimeout(() => {
+      setLobbyShareFeedbackZh("");
+      lobbyShareFeedbackTimeoutRef.current = null;
+    }, 2600);
+  }
+
+  async function copyLobbyRoomCode() {
+    if (typeof window === "undefined") return;
+    try {
+      await navigator.clipboard.writeText(roomCode);
+      setLobbyShareFeedback(`已複製房號 ${roomCode}。玩家可用房號加入。`);
+    } catch {
+      setLobbyShareFeedback("複製失敗，請手動分享房號。");
+    }
+  }
+
+  async function copyLobbyObserverLink() {
+    if (typeof window === "undefined") return;
+    const observerUrl = `${window.location.origin}/rooms/${roomCode}`;
+    try {
+      await navigator.clipboard.writeText(observerUrl);
+      setLobbyShareFeedback("已複製旁觀連結。分享給其他人可直接旁觀。");
+    } catch {
+      setLobbyShareFeedback("複製失敗，請手動複製旁觀連結。");
+    }
   }
 
   async function bootstrap() {
     setLoading(true);
-    setMessage(null);
 
     try {
       const body = {
@@ -846,16 +842,19 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
       const result = (await response.json()) as ApiResponse<BootstrapData>;
 
       if (!result.ok) {
-        setMessage(result.error.message);
         return;
       }
 
       setData(result.data);
-      setSyncStatusZh("同步狀態：已載入最新局面");
       setLatestActionFeedback(null);
       setActionFeedbackHistory([]);
       setSelectedTaskId("");
-      setSelectedActionCardId(result.data.snapshot.players.find((player) => player.seatId === result.data.viewerSeat)?.handCardIds[0] ?? "");
+      {
+        const viewerHandCardIds = result.data.snapshot.players.find((player) => player.seatId === result.data.viewerSeat)?.handCardIds ?? [];
+        const initialSelection = getInitialHandCardSelection(viewerHandCardIds);
+        setSelectedActionCardId(initialSelection.cardId);
+        setSelectedActionCardInstanceKey(initialSelection.instanceKey);
+      }
       setSelectedMapTileId("");
 
       if (result.data.joinToken !== joinToken || result.data.displayName !== displayName) {
@@ -866,7 +865,6 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
         router.replace(`/rooms/${roomCode}?${query.toString()}`);
       }
     } catch {
-      setMessage("入房失敗，請稍後再試。")
     } finally {
       setLoading(false);
     }
@@ -876,6 +874,14 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
     void bootstrap();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomCode]);
+
+  useEffect(() => {
+    return () => {
+      if (typeof window !== "undefined" && lobbyShareFeedbackTimeoutRef.current) {
+        window.clearTimeout(lobbyShareFeedbackTimeoutRef.current);
+      }
+    };
+  }, []);
 
 
   useEffect(() => {
@@ -955,7 +961,18 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
   }, [personalGuidePrefs, personalGuidePrefsReady, personalGuideStorageKey]);
 
   useEffect(() => {
+    if (isGuideOverlayActive) {
+      setShowCenterBroadcast(false);
+      setShowTurnToast(false);
+    }
+  }, [isGuideOverlayActive]);
+
+  useEffect(() => {
     if (!latestActionFeedback) return;
+    if (isGuideOverlayActive) {
+      setShowCenterBroadcast(false);
+      return;
+    }
     if (latestActionFeedback.suppressCenterBroadcast) {
       setShowCenterBroadcast(false);
       return;
@@ -963,7 +980,7 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
     setShowCenterBroadcast(true);
     const timeout = window.setTimeout(() => setShowCenterBroadcast(false), latestActionFeedback.tone === "error" ? 3200 : 2600);
     return () => window.clearTimeout(timeout);
-  }, [latestActionFeedback?.occurredAt, latestActionFeedback?.tone, latestActionFeedback?.suppressCenterBroadcast]);
+  }, [isGuideOverlayActive, latestActionFeedback?.occurredAt, latestActionFeedback?.tone, latestActionFeedback?.suppressCenterBroadcast]);
 
   useEffect(() => {
     if (!data || !uiState || submitting || data.viewerRole !== "host") return;
@@ -1174,10 +1191,6 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
     const params = new URLSearchParams({ roomCode: data.room.roomCode, joinToken: data.joinToken });
     const eventSource = new EventSource(`/api/rooms/subscribe?${params.toString()}`);
 
-    eventSource.addEventListener("ready", () => {
-      setSyncStatusZh("同步狀態：Realtime 已連線，正在等待最新推播。");
-    });
-
     eventSource.addEventListener("state_updated", async (event) => {
       try {
         const payload = JSON.parse((event as MessageEvent).data) as StateUpdatedPayload;
@@ -1192,9 +1205,8 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
         });
         const result = (await response.json()) as ApiResponse<BootstrapData>;
         if (!result.ok) {
-          setSyncStatusZh(`同步狀態：${result.error.message}`);
-          return;
-        }
+        return;
+      }
 
         latestVersionRef.current = result.data.room.version;
         latestRevisionRef.current = result.data.snapshot.roomRevision;
@@ -1212,14 +1224,7 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
               }
             : current,
         );
-        setSyncStatusZh(`同步狀態：已收到推播並追上最新局面（v${payload.version} / rev ${payload.roomRevision}）`);
-      } catch {
-        setSyncStatusZh("同步狀態：收到推播，但同步失敗，將依輪詢補追。");
-      }
-    });
-
-    eventSource.addEventListener("error", () => {
-      setSyncStatusZh("同步狀態：Realtime 連線中斷，改用輪詢補追。");
+      } catch {}
     });
 
     return () => eventSource.close();
@@ -1237,10 +1242,7 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
         });
         const result = (await response.json()) as ApiResponse<BootstrapData>;
 
-        if (!result.ok) {
-          setSyncStatusZh(`同步狀態：${result.error.message}`);
-          return;
-        }
+        if (!result.ok) return;
 
         const incomingVersion = result.data.room.version;
         const incomingRevision = result.data.snapshot.roomRevision;
@@ -1264,14 +1266,9 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
           );
           latestVersionRef.current = incomingVersion;
           latestRevisionRef.current = incomingRevision;
-          setSyncStatusZh(`同步狀態：已追上最新局面（v${incomingVersion} / rev ${incomingRevision}）`);
           return;
         }
-
-        setSyncStatusZh(`同步狀態：已在最新版本（v${currentVersion} / rev ${currentRevision}）`);
-      } catch {
-        setSyncStatusZh("同步狀態：無法自動更新，仍保留目前畫面；必要時可重整頁面。");
-      }
+      } catch {}
     }, 4000);
 
     return () => window.clearInterval(timer);
@@ -1333,7 +1330,6 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
   async function runAction(action: RoomAction) {
     if (!data) return;
     setSubmitting(true);
-    setMessage(null);
     const actionLabelZh = describeRoomActionZh(action, data.snapshot);
     const isMapAction = action.type === "move" || action.type === "adjacent_help" || action.type === "use_station_or_shelter";
 
@@ -1355,7 +1351,6 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
           beforeSnapshot: data.snapshot,
           errorMessageZh: result.error?.message ?? "請稍後再試。",
         });
-        setMessage(result.error?.message ?? "操作失敗。");
         setLatestActionFeedback(feedback);
         setActionFeedbackHistory((current) => appendActionFeedbackHistory(current, feedback));
         if (isMapAction) setMapActionFeedbackZh(buildActionFeedbackSummary(feedback));
@@ -1385,9 +1380,12 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
             }
           : current,
       );
-      setSelectedDiscardCardIds([]);
-      setSelectedActionCardId(responseData.snapshot.players.find((player) => player.seatId === data.viewerSeat)?.handCardIds[0] ?? "");
-      setSyncStatusZh("同步狀態：已送出操作並更新本地局面");
+      {
+        const viewerHandCardIds = responseData.snapshot.players.find((player) => player.seatId === data.viewerSeat)?.handCardIds ?? [];
+        const initialSelection = getInitialHandCardSelection(viewerHandCardIds);
+        setSelectedActionCardId(initialSelection.cardId);
+        setSelectedActionCardInstanceKey(initialSelection.instanceKey);
+      }
       setLatestActionFeedback(feedback);
       setActionFeedbackHistory((current) => appendActionFeedbackHistory(current, feedback));
       if (isMapAction) {
@@ -1399,7 +1397,6 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
         beforeSnapshot: data.snapshot,
         errorMessageZh: "網路或伺服器暫時無法完成這次操作。",
       });
-      setMessage("操作失敗，請稍後再試。");
       setLatestActionFeedback(feedback);
       setActionFeedbackHistory((current) => appendActionFeedbackHistory(current, feedback));
       if (isMapAction) setMapActionFeedbackZh(buildActionFeedbackSummary(feedback));
@@ -1801,6 +1798,19 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
     canUseMessengerAbility ? "你是街巷信使：地圖快捷互助現在也可直接帶入〈牽起連結〉的免費移動；下方完整表單則保留給更細的指定流程。" : null,
     viewerPlayerState?.perRoundFlags.hasAdjacentHelped ? "你本輪已使用過 0AP 相鄰互助，因此地圖快捷互助會鎖定到下一輪。" : canUseAdjacentHelpFromMap ? "你本輪仍可做 1 次 0AP 相鄰互助。" : null,
   ].filter((hint): hint is string => Boolean(hint));
+  const viewerHandCardIds = viewerPlayerState?.handCardIds ?? [];
+
+  useEffect(() => {
+    if (!selectedActionCardInstanceKey) return;
+    const validInstanceKeys = viewerHandCardIds.map((cardId, index) => buildHandCardInstanceKey(cardId, index));
+    if (validInstanceKeys.includes(selectedActionCardInstanceKey)) return;
+    setSelectedActionCardId("");
+    setSelectedActionCardInstanceKey("");
+    setSelectedCardTargetSeat("");
+    setSelectedCardTileId("");
+    setSelectedCardResourceType("SP");
+    setSelectedCardTeammateResourceType("SP");
+  }, [selectedActionCardInstanceKey, viewerHandCardIds]);
 
 
   if (loading || !data || !uiState) {
@@ -2095,16 +2105,6 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
     progressLinesZh: buildTaskProgressLines(data.snapshot, task),
   }));
   const campfireReadyTaskEntries = taskSurfaceEntries.filter((entry) => entry.status.canDeclare);
-  const taskOverviewCounts = taskSurfaceEntries.reduce(
-    (acc, entry) => {
-      if (entry.status.key === "completed") acc.completed += 1;
-      else if (entry.status.key === "ready_to_declare") acc.ready += 1;
-      else if (entry.status.key === "ready_wait_campfire") acc.waitCampfire += 1;
-      else acc.blocked += 1;
-      return acc;
-    },
-    { completed: 0, ready: 0, waitCampfire: 0, blocked: 0 },
-  );
   const settlementOutcome = (() => {
     const pressureDefeat = data.snapshot.pressure >= 10;
     const srZeroSeats = zeroedPlayers.filter((player) => player.currentSr <= 0).map((player) => player.seatId);
@@ -2117,7 +2117,7 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
     if (srZeroSeats.length > 0) nextStepsZh.push(`SR 軸先撐不住的席位：${srZeroSeats.join("、")}；建議優先檢查物資站路徑、風險停留與支援牌效率。`);
     if (spZeroSeats.length > 0) nextStepsZh.push(`SP 軸先撐不住的席位：${spZeroSeats.join("、")}；建議回看庇護所可達性、白衣見習生與陪伴標記使用節點。`);
     if (!pressureDefeat && zeroedPlayers.length === 0 && completedTasks < 2) nextStepsZh.push("隊伍撐住了，但任務量沒達標；建議回看壓力 6 互助門檻與任務市場節奏。");
-    if (nextStepsZh.length === 0) nextStepsZh.push("可直接用 simulation compare 檢查這版規則和牌池，確認本局是否只是單局波動。");
+    if (nextStepsZh.length === 0) nextStepsZh.push("可直接用模擬比較檢查這版規則和牌池，確認本局是否只是單局波動。");
     return {
       tone: likelyVictory ? "emerald" as const : "rose" as const,
       verdictZh: likelyVictory ? "團隊撐過七輪並達成目標" : pressureDefeat ? "壓力線先崩，系統判定失敗" : zeroedPlayers.length > 0 ? "有玩家資源歸零，系統判定失敗" : "本局已結束，請檢查最後收尾原因",
@@ -2137,7 +2137,12 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
   const headerTaskValueZh = `${completedTasks}/${data.snapshot.tasks.length}`;
   const headerCurrentActorZh = data.snapshot.phase === "lobby" ? "待開局" : data.snapshot.activeSeat ?? "—";
   const worldViewTitleZh = "風暴中的互助與守護";
-  const worldViewBodyZh = "你們身處高壓混亂的城鎮，要在七輪內彼此撐住、一起完成任務。SR 代表身體／生存狀態，SP 代表心理／安定狀態，AP 則是你本回合能做的行動數。";
+  const worldViewIntroZh = "你們身處高壓混亂的城鎮，要在七輪內彼此撐住、一起完成任務。";
+  const worldViewResourceLinesZh = [
+    "SR：身體／生存狀態。",
+    "SP：心理／安定狀態。",
+    "AP：你本回合可做的行動數。",
+  ];
   const victoryConditionLinesZh = [
     "撐過第 7 回合營火階段。",
     "整局至少完成 2 張任務。",
@@ -2229,6 +2234,7 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
           const canGuardNow = Boolean(
             currentPendingLoss
             && currentPendingLoss.srLoss > 0
+            && currentPendingLoss.targetSeat !== player.seatId
             && player.positionTileId
             && pendingTarget?.positionTileId
             && areTilesSameOrAdjacent(displayMapTiles, player.positionTileId, pendingTarget.positionTileId),
@@ -2236,7 +2242,7 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
           stateLabelZh = canGuardNow ? "可回應" : "待條件";
           detailZh = canGuardNow
             ? `目前若結算 ${currentPendingLoss?.targetSeat} 的損失，你可手動決定是否發動〈穩住陣腳〉。`
-            : "當自己或相鄰隊友將失去 SR 時，系統會跳出回應窗讓你決定是否發動。";
+            : "當相鄰隊友將失去 SR 時，系統會跳出回應窗讓你決定是否發動。";
           tone = canGuardNow ? "emerald" : "amber";
           interactionHintZh = "符合條件時，會出現『發動／略過』的角色技能回應窗。";
           break;
@@ -2382,18 +2388,18 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
       id: "event",
       titleZh: "此為事件卡區",
       areaZh: "上方事件列",
-      summaryZh: "每輪一開始都會先翻出事件，事件會立刻帶來壓力或風險，若本輪沒有達標，就要承受未解懲罰。",
+      summaryZh: "每輪先翻事件。先看需求與未解懲罰，再決定這輪要不要優先處理。",
       bulletsZh: [
-        "先看事件名稱、需求值與未解懲罰。",
-        "投入事件不花 AP，但必須在自己的回合內做。",
-        "壓力到 3 之後，事件要至少兩名玩家實際投入才算解掉。",
+        "先看事件名稱、需求與未解懲罰。",
+        "投入事件不花 AP，但要在自己的回合內做。",
+        "壓力到 3 後，至少要兩名玩家實際投入才算解掉。",
       ],
     },
     {
       id: "tasks",
       titleZh: "此為任務列",
       areaZh: "事件列下方的任務區",
-      summaryZh: "任務不是自動結算，條件成立後，要在營火階段由玩家主動宣告，才算完成並拿到獎勵。",
+      summaryZh: "任務不會自動完成。條件成立後，要在營火主動宣告。",
       bulletsZh: [
         "先觀察哪張任務快達成。",
         "壓力到 6 之後，如果本輪沒有 0AP 相鄰互助，就不能宣告任務。",
@@ -2404,7 +2410,7 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
       id: "map",
       titleZh: "此為地圖主介面",
       areaZh: "中央大區塊",
-      summaryZh: "你的角色會在地圖上移動、會合、進站點、卡在風險地格，很多決策都在這裡完成。",
+      summaryZh: "移動、會合、進站點與風險停留，主要都在地圖上完成。",
       bulletsZh: [
         "移動 1 格通常花 1 AP。",
         "風險地格可以走，但若營火時還停在上面，會吃 SR 損失。",
@@ -2415,7 +2421,7 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
       id: "roster",
       titleZh: "此為玩家狀態區",
       areaZh: "地圖左側",
-      summaryZh: "這裡會顯示每位玩家的 SR、SP、位置與角色能力狀態，方便你判斷誰需要先救、誰適合去處理事件。",
+      summaryZh: "這裡會顯示每位玩家的 SR、SP、位置與技能狀態，方便你判斷誰該先處理。",
       bulletsZh: [
         "SR 是生存／身體狀態，SP 是心理／安定狀態。",
         "有人接近 0 時，就要優先考慮互助或陪伴標記。",
@@ -2426,7 +2432,7 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
       id: "hand",
       titleZh: "此為手牌區",
       areaZh: "右側欄位",
-      summaryZh: "行動卡能幫你補位、支援、或調整事件處理節奏，但不是每回合都一定要打。",
+      summaryZh: "行動卡能幫你補位、支援，或調整事件節奏，但不一定每回合都要打。",
       bulletsZh: [
         "大部分行動卡要花 1 AP。",
         "手牌上限是 3；滿手時不再抽牌，但也不用額外棄牌。",
@@ -2437,7 +2443,7 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
       id: "controls",
       titleZh: "此為操作列與流程按鈕",
       areaZh: "畫面最上方",
-      summaryZh: "當輪到你時，會在這裡結束回合、查看目標，必要時也能重新打開教學。",
+      summaryZh: "輪到你時，會在這裡結束回合、查看目標，也能重開教學。",
       bulletsZh: [
         "如果你已經做完這回合，按『結束回合』交棒給下一位。",
         "若有阻塞視窗，代表系統正在等某位玩家做裁定。",
@@ -2491,9 +2497,6 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
       bulletsZh: campfireStepCards.map((item) => `${item.step}. ${item.titleZh}`),
     },
   };
-  const taskActionHintZh = data.snapshot.phase === "campfire"
-    ? "若條件達成，請在這裡宣告任務。宣告成功後應立即套用獎勵。"
-    : "任務只能在營火階段主動宣告。";
   const blockingAbilityWindow = data.snapshot.blockingWindow?.kind === "ability" ? data.snapshot.blockingWindow : null;
   const merchantGuardAbilityWindow = blockingAbilityWindow?.abilityId === "merchant_guard" ? blockingAbilityWindow : null;
   const storytellerAbilityWindow = blockingAbilityWindow?.abilityId === "square_storyteller" ? blockingAbilityWindow : null;
@@ -2531,77 +2534,6 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
     : zeroedPlayers.length > 0
       ? `以下玩家資源歸零：${zeroedPlayers.map((player) => `${player.seatId}｜${player.displayName}`).join("、")}`
       : "本局已離開主流程，請查看紀錄確認最後一段結算。";
-  const roomSummaryActionCards = [
-    {
-      titleZh: "事件進度",
-      tone: eventProgress && (eventProgress.remainingSr > 0 || eventProgress.remainingSp > 0) ? "amber" as const : "emerald" as const,
-      summaryZh: eventProgress
-        ? eventProgress.remainingSr > 0 || eventProgress.remainingSp > 0
-          ? `還缺 SR ${eventProgress.remainingSr} / SP ${eventProgress.remainingSp}`
-          : "事件數值需求已滿足"
-        : "本輪目前沒有可追蹤事件",
-      detailZh: eventProgress
-        ? `${eventProgress.distinctContributorCount} 名玩家已投入${data.snapshot.pressure >= 3 ? "；多人投入條件已納入判定" : "；壓力未達 3 時尚未鎖多人投入"}`
-        : "可先觀察場上行動與營火時序。",
-    },
-    {
-      titleZh: "任務宣告",
-      tone: taskDeclarationDiagnostic?.status === "ready" ? "emerald" as const : taskDeclarationDiagnostic?.status === "blocked" ? "rose" as const : "sky" as const,
-      summaryZh: taskDeclarationDiagnostic?.summaryZh ?? "先選一張任務，就能在這裡看到流程判讀。",
-      detailZh: taskDeclarationDiagnostic?.reasonsZh[0] ?? taskActionHintZh,
-    },
-    {
-      titleZh: "本輪合作節點",
-      tone: teamAdjacentHelpDoneThisRound ? "emerald" as const : data.snapshot.pressure >= 6 ? "rose" as const : "sky" as const,
-      summaryZh: teamAdjacentHelpDoneThisRound ? "本輪已完成 0AP 相鄰互助" : "本輪尚未完成 0AP 相鄰互助",
-      detailZh: pressureTaskUnlockStatusZh,
-    },
-  ];
-  const observerExperienceSummary = (() => {
-    if (data.viewerRole !== "observer") return null;
-    const waitingSeat = currentPendingLoss?.targetSeat ?? data.snapshot.activeSeat ?? "—";
-    const queuePositionZh = queuedPendingLosses.length > 0
-      ? currentPendingLoss
-        ? `營火損失佇列第 1/${queuedPendingLosses.length} 筆，後面還有 ${Math.max(queuedPendingLosses.length - 1, 0)} 筆。`
-        : `營火損失佇列共有 ${queuedPendingLosses.length} 筆，等待正式進入逐筆處理。`
-      : "目前沒有待處理損失佇列。";
-    const nextStepZh = currentPendingLoss
-      ? "這筆損失處理完後，會往下一筆損失或壓力／狀態確認推進。"
-      : data.snapshot.phase === "campfire"
-          ? queuedPendingLosses.length > 0
-            ? "下一步通常是繼續處理營火損失佇列。"
-            : "下一步通常是壓力＋1、里程碑檢查與勝敗確認。"
-          : data.snapshot.phase === "action"
-            ? `下一步通常是等待 ${data.snapshot.activeSeat ?? "—"} 完成本回合，或由 AI / 主機推進。`
-            : "下一步視主機是否開始本輪或推進階段而定。";
-    const waitingReasonZh = currentPendingLoss
-      ? `目前卡在損失處理，等待 ${currentPendingLoss.targetSeat} 對 ${currentPendingLoss.sourceLabelZh ?? "目前損失"} 作出處理。`
-      : data.snapshot.blockingWindow
-          ? `目前有 阻塞視窗（${data.snapshot.blockingWindow.kind}），正式局面暫停推進。`
-          : data.snapshot.phase === "action"
-            ? `目前是 ${data.snapshot.activeSeat ?? "—"} 的行動階段，等待該席位完成本回合操作。`
-            : data.snapshot.phase === "campfire"
-              ? "目前在營火階段，請留意事件處理區、任務宣告與損失視窗是否仍有未結項目。"
-              : "目前沒有額外阻塞，可觀察主持人如何推進下一步。";
-    return {
-      waitingSeat,
-      waitingReasonZh,
-      queuePositionZh,
-      nextStepZh,
-      canSeeZh: "你可查看地圖、事件、任務、阻塞視窗、紀錄與玩家狀態。",
-      cannotDoZh: "你不能送出正式 action，也不能替任何座位做決策或變更局面。",
-    };
-  })();
-  const systemToggleEntries = [
-    ["observerModeEnabled", "觀察者模式"],
-    ["actionLogEnabled", "回合紀錄"],
-    ["aiSimulationModeEnabled", "AI 驗證模式"],
-    ["replayEnabled", "重播模式"],
-  ] as const;
-  const actionDeckProfiles = Object.values(ACTION_DECK_PROFILE_MAP);
-  const eventPoolProfiles = Object.values(EVENT_POOL_PROFILE_MAP);
-  const taskPoolProfiles = Object.values(TASK_POOL_PROFILE_MAP);
-
   async function updateRoomConfigPatch(patch: Extract<RoomAction, { type: "update_room_config" }>["patch"]) {
     if (!data?.viewerSeat) return;
     await runAction({ type: "update_room_config", actorSeat: data.viewerSeat, patch });
@@ -2709,13 +2641,10 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
   const desktopTaskRailItems = taskSurfaceEntries.map(({ task, status }) => ({
     taskId: task.taskId,
     title: task.nameZh,
-    subtitle: task.completionHintZh,
-    reward: task.rewardTextZh,
     isDone: task.completionCheckedByHost,
     isSelected: selectedTaskId === task.taskId,
-    hint: status.reasonsZh[0] ?? status.summaryZh,
-    summaryZh: status.summaryZh,
     badgeZh: status.badgeZh,
+    railStatusZh: status.canDeclare ? "可宣告" : status.key === "ready_wait_campfire" ? "待營火" : task.completionCheckedByHost ? "完成" : undefined,
     tone: status.tone,
     canDeclare: status.canDeclare,
   }));
@@ -2751,15 +2680,17 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
     };
   });
 
-  const desktopHandItems = (viewerPlayerState?.handCardIds ?? []).map((cardId) => {
+  const desktopHandItems = viewerHandCardIds.map((cardId, index) => {
     const card = ACTION_CARD_DEFINITION_MAP[cardId];
+    const instanceKey = buildHandCardInstanceKey(cardId, index);
     return {
+      instanceKey,
       cardId,
       title: card?.nameZh ?? cardId,
       category: card?.category ?? "support",
       description: card?.rulesTextZh ?? "尚未載入牌面文字",
       note: card?.noteZh ?? "",
-      selected: selectedActionCardId === cardId,
+      selected: selectedActionCardInstanceKey === instanceKey,
       metaPills: buildActionCardMetaPills(cardId),
     };
   });
@@ -2799,11 +2730,17 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
         teammateResourceOptions: cardNeedsTeammateResourceSelection ? cardTeammateResourceOptions : undefined,
         metaPills: buildActionCardMetaPills(currentCardDefinition.cardId),
         channelSections: buildActionCardChannels(currentCardDefinition.cardId),
-        reservedSlots: buildReservedSlots("action"),
       }
     : null;
 
   const selectedTaskProgressLinesZh = selectedTask ? buildTaskProgressLines(data.snapshot, selectedTask) : [];
+  const selectedTaskDetailLinesZh = selectedTaskProgressLinesZh.filter((line, index, array) => array.indexOf(line) === index);
+  const selectedTaskNoteLinesZh = selectedTaskSurfaceStatus
+    ? selectedTaskSurfaceStatus.reasonsZh
+        .filter((reason, index, array) => array.indexOf(reason) === index)
+        .filter((reason) => reason !== selectedTaskSurfaceStatus.summaryZh && !selectedTaskDetailLinesZh.includes(reason))
+        .slice(0, 2)
+    : [];
   const desktopEnvironmentPills = buildEnvironmentPills(data.snapshot);
   const desktopSelectedTaskPanel = selectedTask && selectedTaskSurfaceStatus
     ? {
@@ -2819,10 +2756,6 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
         progressLinesZh: selectedTaskProgressLinesZh,
         canDeclare: selectedTaskSurfaceStatus.canDeclare,
         declareDisabledReasonZh: !selectedTaskSurfaceStatus.canDeclare ? (selectedTaskSurfaceStatus.reasonsZh[0] ?? selectedTaskSurfaceStatus.summaryZh) : undefined,
-        overviewCounts: taskOverviewCounts,
-        metaPills: buildTaskCardMetaPills(selectedTask, selectedTaskSurfaceStatus),
-        channelSections: buildTaskCardChannels(selectedTask, selectedTaskSurfaceStatus),
-        reservedSlots: buildReservedSlots("task"),
       }
     : null;
 
@@ -2854,6 +2787,84 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
     />
   );
 
+  const viewerRoleChipZh = data.viewerRole === "observer"
+    ? "觀察者模式"
+    : `${data.displayName}｜${uiState.roomRoleLabelZh}${data.viewerSeat ? `｜${data.viewerSeat}` : ""}`;
+
+  const renderTopToolbarActionPills = () => (
+    <>
+      {data.snapshot.phase === "lobby" ? (
+        <ActionPillButton
+          label="開始遊戲"
+          disabled={!uiState.canStartGame || submitting}
+          tone="dark"
+          title={uiState.canStartGame ? "開始整局流程" : startGameHintZh}
+          onClick={() => runAction({ type: "start_game", actorSeat: data.viewerSeat ?? "P1" })}
+        />
+      ) : null}
+      {canViewerEndTurn ? (
+        <ActionPillButton
+          label="結束回合"
+          disabled={submitting}
+          tone="dark"
+          title="結束你的行動，交棒給下一位。若還有可做的 0AP 操作，系統會先提醒。"
+          onClick={() => runAction({ type: "end_turn", actorSeat: data.viewerSeat ?? "P1" })}
+        />
+      ) : null}
+      {data.snapshot.phase !== "lobby" ? (
+        <>
+          <button className="rounded-full border border-sky-300 bg-sky-50 px-3 py-1.5 text-[11px] font-medium text-sky-700 hover:bg-sky-100" onClick={() => { setPersonalGuidePrefs((current) => ({ ...current, guideEnabled: true })); setShowNewcomerGuideModal(true); setPersonalGuideWalkthroughStep(0); }}>新手教學</button>
+          <button className="rounded-full border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-[11px] font-medium text-emerald-700 hover:bg-emerald-100" onClick={() => setShowGoalsModal(true)}>本局目標</button>
+          <button className="rounded-full border border-violet-300 bg-violet-50 px-3 py-1.5 text-[11px] font-medium text-violet-700 hover:bg-violet-100" onClick={() => setShowWorldviewModal(true)}>世界觀</button>
+        </>
+      ) : null}
+      <Link href={`/rooms/${roomCode}/logs?joinToken=${encodeURIComponent(data.joinToken)}&displayName=${encodeURIComponent(data.displayName)}`} className="rounded-full border border-stone-300 bg-white px-3 py-1.5 text-[11px] font-medium text-stone-700 hover:bg-stone-50">紀錄</Link>
+      <button className="rounded-full border border-stone-300 bg-white px-3 py-1.5 text-[11px] font-medium text-stone-700 hover:bg-stone-50" onClick={() => void bootstrap()}>重整</button>
+      <button className="rounded-full border border-stone-300 bg-white px-3 py-1.5 text-[11px] font-medium text-stone-700 hover:bg-stone-50" onClick={() => router.push('/')}>首頁</button>
+      {data.snapshot.phase !== "lobby" && desktopEnvironmentPills.length > 0 ? (
+        <details className="relative rounded-full border border-stone-300 bg-white px-2.5 py-1.5 text-[11px] text-stone-700">
+          <summary className="cursor-pointer list-none font-medium">環境</summary>
+          <div className="absolute right-0 top-[calc(100%+8px)] z-30 w-[280px] rounded-2xl border border-stone-200 bg-white p-3 shadow-xl">
+            <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-stone-500">環境校正</p>
+            <p className="mt-1 text-[9px] leading-4 text-stone-500">版本校正用，不影響主流程判讀。</p>
+            <DesktopCardMetaStrip items={desktopEnvironmentPills} className="mt-2" />
+          </div>
+        </details>
+      ) : null}
+      {data.viewerRole === "host" ? (
+        <details className="relative rounded-full border border-stone-300 bg-white px-2.5 py-1.5 text-[11px] text-stone-700">
+          <summary className="cursor-pointer list-none font-medium">流程備援</summary>
+          <div className="absolute right-0 top-[calc(100%+8px)] z-30 w-[280px] rounded-2xl border border-stone-200 bg-white p-3 shadow-xl">
+            <p className="text-[9.5px] text-stone-500">主流程卡住時再用。</p>
+            <div className="space-y-2">
+              <ActionPillButton
+                label="開始本輪"
+                disabled={!uiState.canStartRound || submitting}
+                tone="amber"
+                title={uiState.canStartRound ? "若自動推進失敗，可手動開始本輪。" : (uiState.hostActionReasonZh ?? actionDisabledReasonZh ?? uiState.phaseSummaryZh)}
+                onClick={() => runAction({ type: "start_round", actorSeat: data.viewerSeat ?? "P1" })}
+              />
+              <ActionPillButton
+                label="處理營火"
+                disabled={!uiState.canResolveCampfire || submitting}
+                tone="rose"
+                title={uiState.canResolveCampfire ? "若自動推進失敗，可手動處理營火。" : (uiState.hostActionReasonZh ?? actionDisabledReasonZh ?? uiState.phaseSummaryZh)}
+                onClick={() => runAction({ type: "resolve_campfire", actorSeat: data.viewerSeat ?? "P1" })}
+              />
+              <ActionPillButton
+                label="AI 下一位"
+                disabled={submitting || !data.viewerSeat || data.viewerRole !== "host"}
+                tone="outline"
+                title="由系統推進當前 AI 座位"
+                onClick={() => runAction({ type: "run_ai_turn", actorSeat: data.viewerSeat ?? "P1" })}
+              />
+            </div>
+          </div>
+        </details>
+      ) : null}
+    </>
+  );
+
   return (
     <main className="min-h-screen bg-stone-100 px-2.5 py-3 text-stone-900 lg:px-3 lg:py-3.5">
       <div className="mx-auto mb-2 max-w-[1500px]">
@@ -2862,161 +2873,25 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
             <div className="flex flex-wrap items-center justify-between gap-2 xl:hidden">
               <span className="rounded-full bg-stone-900 px-3 py-1 text-[11px] font-semibold text-white">{data.room.roomCode}</span>
               <span className="rounded-full border border-stone-200 bg-stone-50 px-3 py-1 text-[11px] font-medium text-stone-700">{phaseLabel(data.snapshot.phase)}</span>
-              <span className="rounded-full border border-stone-200 bg-stone-50 px-3 py-1 text-[11px] text-stone-600">{data.viewerRole === "observer" ? "觀察者模式" : `${data.displayName}｜${uiState.roomRoleLabelZh}${data.viewerSeat ? `｜${data.viewerSeat}` : ""}`}</span>
+              <span className="rounded-full border border-stone-200 bg-stone-50 px-3 py-1 text-[11px] text-stone-600">{viewerRoleChipZh}</span>
             </div>
             <div className="hidden xl:flex xl:items-center xl:justify-between xl:gap-3">
               <div className="flex min-w-0 flex-wrap items-center gap-2">
                 <span className="rounded-full bg-stone-900 px-3 py-1 text-[11px] font-semibold text-white">{data.room.roomCode}</span>
                 <span className="rounded-full border border-stone-200 bg-stone-50 px-3 py-1 text-[11px] font-medium text-stone-700">{phaseLabel(data.snapshot.phase)}</span>
-                <span className="rounded-full border border-stone-200 bg-stone-50 px-3 py-1 text-[11px] text-stone-600">{data.viewerRole === "observer" ? "觀察者模式" : `${data.displayName}｜${uiState.roomRoleLabelZh}${data.viewerSeat ? `｜${data.viewerSeat}` : ""}`}</span>
+                <span className="rounded-full border border-stone-200 bg-stone-50 px-3 py-1 text-[11px] text-stone-600">{viewerRoleChipZh}</span>
               </div>
               <div id="gh-guide-zone-controls" className="flex flex-wrap items-center justify-end gap-1.5">
-                {data.snapshot.phase === "lobby" ? (
-                  <ActionPillButton
-                    label="開始遊戲"
-                    disabled={!uiState.canStartGame || submitting}
-                    tone="dark"
-                    title={uiState.canStartGame ? "開始整局流程" : startGameHintZh}
-                    onClick={() => runAction({ type: "start_game", actorSeat: data.viewerSeat ?? "P1" })}
-                  />
-                ) : null}
-                {canViewerEndTurn ? (
-                  <ActionPillButton
-                    label="結束回合"
-                    disabled={submitting}
-                    tone="dark"
-                    title="結束你的行動，交棒給下一位。若還有可做的 0AP 操作，系統會先提醒。"
-                    onClick={() => runAction({ type: "end_turn", actorSeat: data.viewerSeat ?? "P1" })}
-                  />
-                ) : null}
-                {data.snapshot.phase !== "lobby" ? (
-                  <>
-                    <button className="rounded-full border border-sky-300 bg-sky-50 px-3 py-1.5 text-[11px] font-medium text-sky-700 hover:bg-sky-100" onClick={() => { setPersonalGuidePrefs((current) => ({ ...current, guideEnabled: true })); setShowNewcomerGuideModal(true); setPersonalGuideWalkthroughStep(0); }}>新手教學</button>
-                    <button className="rounded-full border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-[11px] font-medium text-emerald-700 hover:bg-emerald-100" onClick={() => setShowGoalsModal(true)}>本局目標</button>
-                    <button className="rounded-full border border-violet-300 bg-violet-50 px-3 py-1.5 text-[11px] font-medium text-violet-700 hover:bg-violet-100" onClick={() => setShowWorldviewModal(true)}>世界觀</button>
-                  </>
-                ) : null}
-                <Link href={`/rooms/${roomCode}/logs?joinToken=${encodeURIComponent(data.joinToken)}&displayName=${encodeURIComponent(data.displayName)}`} className="rounded-full border border-stone-300 bg-white px-3 py-1.5 text-[11px] font-medium text-stone-700 hover:bg-stone-50">紀錄</Link>
-                <button className="rounded-full border border-stone-300 bg-white px-3 py-1.5 text-[11px] font-medium text-stone-700 hover:bg-stone-50" onClick={() => void bootstrap()}>重整</button>
-                <button className="rounded-full border border-stone-300 bg-white px-3 py-1.5 text-[11px] font-medium text-stone-700 hover:bg-stone-50" onClick={() => router.push('/')}>首頁</button>
-                {data.snapshot.phase !== "lobby" && desktopEnvironmentPills.length > 0 ? (
-                  <details className="relative rounded-full border border-stone-300 bg-white px-2.5 py-1.5 text-[11px] text-stone-700">
-                    <summary className="cursor-pointer list-none font-medium">環境</summary>
-                    <div className="absolute right-0 top-[calc(100%+8px)] z-30 w-[280px] rounded-2xl border border-stone-200 bg-white p-3 shadow-xl">
-                      <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-stone-500">環境校正</p>
-                      <p className="mt-1 text-[9px] leading-4 text-stone-500">這些資訊只用來做版本校正，不給一般玩家判讀主流程。</p>
-                      <DesktopCardMetaStrip items={desktopEnvironmentPills} className="mt-2" />
-                    </div>
-                  </details>
-                ) : null}
-                {data.viewerRole === "host" ? (
-                  <details className="relative rounded-full border border-stone-300 bg-white px-2.5 py-1.5 text-[11px] text-stone-700">
-                    <summary className="cursor-pointer list-none font-medium">流程備援</summary>
-                    <div className="absolute right-0 top-[calc(100%+8px)] z-30 w-[280px] rounded-2xl border border-stone-200 bg-white p-3 shadow-xl">
-                      <p className="text-[9.5px] text-stone-500">滑過先看效果，點一下固定選牌。</p>
-                      <div className="space-y-2">
-                        <ActionPillButton
-                          label="開始本輪"
-                          disabled={!uiState.canStartRound || submitting}
-                          tone="amber"
-                          title={uiState.canStartRound ? "若自動推進失敗，可手動開始本輪。" : (uiState.hostActionReasonZh ?? actionDisabledReasonZh ?? uiState.phaseSummaryZh)}
-                          onClick={() => runAction({ type: "start_round", actorSeat: data.viewerSeat ?? "P1" })}
-                        />
-                        <ActionPillButton
-                          label="處理營火"
-                          disabled={!uiState.canResolveCampfire || submitting}
-                          tone="rose"
-                          title={uiState.canResolveCampfire ? "若自動推進失敗，可手動處理營火。" : (uiState.hostActionReasonZh ?? actionDisabledReasonZh ?? uiState.phaseSummaryZh)}
-                          onClick={() => runAction({ type: "resolve_campfire", actorSeat: data.viewerSeat ?? "P1" })}
-                        />
-                        <ActionPillButton
-                          label="AI 下一位"
-                          disabled={submitting || !data.viewerSeat || data.viewerRole !== "host"}
-                          tone="outline"
-                          title="讓 AI 補位直接執行下一個正式動作。"
-                          onClick={() => runAction({ type: "run_ai_turn", actorSeat: data.viewerSeat ?? "P1" })}
-                        />
-                      </div>
-                    </div>
-                  </details>
-                ) : null}
+                {renderTopToolbarActionPills()}
               </div>
             </div>
             <div id="gh-guide-zone-controls" className="mt-2 flex flex-wrap items-center gap-1.5 xl:hidden">
-              {data.snapshot.phase === "lobby" ? (
-                <ActionPillButton
-                  label="開始遊戲"
-                  disabled={!uiState.canStartGame || submitting}
-                  tone="dark"
-                  title={uiState.canStartGame ? "開始整局流程" : startGameHintZh}
-                  onClick={() => runAction({ type: "start_game", actorSeat: data.viewerSeat ?? "P1" })}
-                />
-              ) : null}
-              {canViewerEndTurn ? (
-                <ActionPillButton
-                  label="結束回合"
-                  disabled={submitting}
-                  tone="dark"
-                  title="結束你的行動，交棒給下一位。若還有可做的 0AP 操作，系統會先提醒。"
-                  onClick={() => runAction({ type: "end_turn", actorSeat: data.viewerSeat ?? "P1" })}
-                />
-              ) : null}
-              {data.snapshot.phase !== "lobby" ? (
-                <>
-                  <button className="rounded-full border border-sky-300 bg-sky-50 px-3 py-1.5 text-[11px] font-medium text-sky-700 hover:bg-sky-100" onClick={() => { setPersonalGuidePrefs((current) => ({ ...current, guideEnabled: true })); setShowNewcomerGuideModal(true); setPersonalGuideWalkthroughStep(0); }}>新手教學</button>
-                  <button className="rounded-full border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-[11px] font-medium text-emerald-700 hover:bg-emerald-100" onClick={() => setShowGoalsModal(true)}>本局目標</button>
-                  <button className="rounded-full border border-violet-300 bg-violet-50 px-3 py-1.5 text-[11px] font-medium text-violet-700 hover:bg-violet-100" onClick={() => setShowWorldviewModal(true)}>世界觀</button>
-                </>
-              ) : null}
-              <Link href={`/rooms/${roomCode}/logs?joinToken=${encodeURIComponent(data.joinToken)}&displayName=${encodeURIComponent(data.displayName)}`} className="rounded-full border border-stone-300 bg-white px-3 py-1.5 text-[11px] font-medium text-stone-700 hover:bg-stone-50">紀錄</Link>
-              <button className="rounded-full border border-stone-300 bg-white px-3 py-1.5 text-[11px] font-medium text-stone-700 hover:bg-stone-50" onClick={() => void bootstrap()}>重整</button>
-              <button className="rounded-full border border-stone-300 bg-white px-3 py-1.5 text-[11px] font-medium text-stone-700 hover:bg-stone-50" onClick={() => router.push('/')}>首頁</button>
-              {data.snapshot.phase !== "lobby" && desktopEnvironmentPills.length > 0 ? (
-                <details className="relative rounded-full border border-stone-300 bg-white px-2.5 py-1.5 text-[11px] text-stone-700">
-                  <summary className="cursor-pointer list-none font-medium">環境</summary>
-                  <div className="absolute right-0 top-[calc(100%+8px)] z-30 w-[280px] rounded-2xl border border-stone-200 bg-white p-3 shadow-xl">
-                    <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-stone-500">環境校正</p>
-                    <p className="mt-1 text-[9px] leading-4 text-stone-500">這些資訊只用來做版本校正，不給一般玩家判讀主流程。</p>
-                    <DesktopCardMetaStrip items={desktopEnvironmentPills} className="mt-2" />
-                  </div>
-                </details>
-              ) : null}
-              {data.viewerRole === "host" ? (
-                <details className="relative rounded-full border border-stone-300 bg-white px-2.5 py-1.5 text-[11px] text-stone-700">
-                  <summary className="cursor-pointer list-none font-medium">流程備援</summary>
-                  <div className="absolute right-0 top-[calc(100%+8px)] z-30 w-[280px] rounded-2xl border border-stone-200 bg-white p-3 shadow-xl">
-                    <p className="text-[9.5px] text-stone-500">滑過先看效果，點一下固定選牌。</p>
-                    <div className="space-y-2">
-                      <ActionPillButton
-                        label="開始本輪"
-                        disabled={!uiState.canStartRound || submitting}
-                        tone="amber"
-                        title={uiState.canStartRound ? "若自動推進失敗，可手動開始本輪。" : (uiState.hostActionReasonZh ?? actionDisabledReasonZh ?? uiState.phaseSummaryZh)}
-                        onClick={() => runAction({ type: "start_round", actorSeat: data.viewerSeat ?? "P1" })}
-                      />
-                      <ActionPillButton
-                        label="處理營火"
-                        disabled={!uiState.canResolveCampfire || submitting}
-                        tone="rose"
-                        title={uiState.canResolveCampfire ? "若自動推進失敗，可手動處理營火。" : (uiState.hostActionReasonZh ?? actionDisabledReasonZh ?? uiState.phaseSummaryZh)}
-                        onClick={() => runAction({ type: "resolve_campfire", actorSeat: data.viewerSeat ?? "P1" })}
-                      />
-                      <ActionPillButton
-                        label="AI 下一位"
-                        disabled={submitting || !data.viewerSeat}
-                        tone="outline"
-                        title="由系統推進當前 AI 座位"
-                        onClick={() => runAction({ type: "run_ai_turn", actorSeat: data.viewerSeat ?? "P1" })}
-                      />
-                    </div>
-                  </div>
-                </details>
-              ) : null}
+              {renderTopToolbarActionPills()}
             </div>
           </div>
 
 
-          <div className="mt-2 grid gap-2 xl:hidden xl:grid-cols-[minmax(0,1.72fr)_minmax(0,0.78fr)] xl:items-start">
+          <div className="mt-2 grid gap-2 xl:hidden">
             <div className="min-w-0 rounded-[16px] border border-stone-200 bg-stone-50 px-3 py-2">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
@@ -3065,7 +2940,7 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
                   ) : null}
                 </div>
               ) : (
-                <p className="mt-1 text-[11px] text-stone-600">尚未翻出事件，系統會在新一輪開始時自動揭示。</p>
+                <p className="mt-1 text-[11px] text-stone-600">新一輪會自動揭示事件。</p>
               )}
             </div>
 
@@ -3095,7 +2970,7 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
             <div className="mt-4 rounded-[20px] border border-amber-200 bg-amber-50/70 p-4 text-sm leading-7 text-amber-950">
               {campfireReadyTaskEntries.length > 0
                 ? <p>目前有 <b>{campfireReadyTaskEntries.length}</b> 張任務可宣告。先完成任務宣告，系統才會繼續自動處理後面的營火結算。</p>
-                : <p>目前沒有可宣告任務。系統會短暫停留後自動繼續營火結算。</p>}
+                : <p>目前沒有可宣告任務，系統會自動繼續營火。</p>}
             </div>
             {campfireReadyTaskEntries.length > 0 ? (
               <div className="mt-4 space-y-3">
@@ -3132,7 +3007,7 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
                   {campfireReadyTaskEntries.length > 0 ? "略過任務宣告，繼續營火" : "立即繼續營火"}
                 </button>
               ) : (
-                <p className="text-[11px] text-stone-500">若你不宣告任務，請等待房主繼續營火。</p>
+                <p className="text-[11px] text-stone-500">不宣告就等房主繼續營火。</p>
               )}
             </div>
           </div>
@@ -3145,9 +3020,14 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
               <>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-violet-600">正式開始前</p>
                 <h2 className="mt-1 text-2xl font-bold text-stone-950">世界觀</h2>
-                <div className="mt-4 rounded-3xl border border-violet-200 bg-violet-50 p-4 text-sm leading-7 text-violet-950">
-                  <p>{worldViewBodyZh}</p>
-                  <p className="mt-3">你們需要在高壓與失序中保住彼此，優先處理事件、完成任務，並避免 SR / SP 崩盤。</p>
+                <div className="mt-4 rounded-3xl border border-violet-200 bg-violet-50 p-4">
+                  <p className="text-sm leading-7 text-violet-950">{worldViewIntroZh}</p>
+                  <ul className="mt-3 space-y-2 text-sm leading-7 text-violet-950">
+                    {worldViewResourceLinesZh.map((line, index) => (
+                      <li key={`worldview-line-${index}`} className="rounded-2xl bg-white px-3 py-2">• {renderKeyText(line, "amber")}</li>
+                    ))}
+                  </ul>
+                  <p className="mt-3 text-sm leading-7 text-violet-950">目標是保住彼此、處理事件、完成任務，避免 SR / SP 崩盤。</p>
                 </div>
                 <div className="mt-5 flex justify-end">
                   <button className="rounded-full bg-stone-900 px-4 py-2 text-sm font-medium text-white" onClick={() => setOpeningOnboardingStep("victory")}>下一步</button>
@@ -3172,9 +3052,9 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
             ) : (
               <>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-600">正式開始前</p>
-                <h2 className="mt-1 text-2xl font-bold text-stone-950">需要新手引導嗎？</h2>
+                <h2 className="mt-1 text-2xl font-bold text-stone-950">要新手引導嗎？</h2>
                 <div className="mt-4 rounded-3xl border border-sky-200 bg-sky-50 p-4 text-sm leading-7 text-sky-950">
-                  <p>若你是第一次玩，建議看一次引導式教學。系統會帶你理解目標、資源、基本操作，以及第一輪最重要的判斷重點。</p>
+                  <p>第一次玩建議先看一遍，會更快上手。</p>
                 </div>
                 <div className="mt-5 flex flex-wrap items-center justify-end gap-2">
                   <button className="rounded-full border border-stone-300 bg-white px-4 py-2 text-sm text-stone-700 hover:bg-stone-50" onClick={() => setOpeningOnboardingStep("victory")}>上一頁</button>
@@ -3212,9 +3092,6 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
                   </span>
                 ))}
               </div>
-              <div className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-2 text-[12px] font-medium text-rose-700">
-                畫面中已用紅框標出「這一塊」；外側會變暗，方便你直接對照目前正在介紹的區域。
-              </div>
               <div className="mt-4 min-h-0 flex-1 overflow-y-auto pr-1">
                 <div className="grid gap-4 lg:grid-cols-[1.05fr_0.95fr]">
                   <div className="rounded-3xl border border-sky-200 bg-sky-50 p-5">
@@ -3228,7 +3105,7 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
                   </div>
                   <div className="space-y-3">
                     <div className="rounded-3xl border border-stone-200 bg-stone-50 p-4 text-sm leading-7 text-stone-700">
-                      <p className="font-semibold text-stone-900">現在畫面上可以對照什麼</p>
+                      <p className="font-semibold text-stone-900">對照畫面</p>
                       {activePersonalGuideStep.id === "event" ? (
                         <>
                           <p className="mt-2">目前事件：<span className="font-semibold text-stone-950">{data.snapshot.currentEvent?.nameZh ?? "尚未翻出事件"}</span></p>
@@ -3237,22 +3114,22 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
                       ) : activePersonalGuideStep.id === "tasks" ? (
                         <>
                           <p className="mt-2">本局目前已完成 <span className="font-semibold text-emerald-700">{completedTasks}</span> / {totalTasks} 張任務。</p>
-                          <p>若你想完成任務，要記得等營火階段主動宣告。</p>
+                          <p>任務要等營火階段主動宣告。</p>
                         </>
                       ) : activePersonalGuideStep.id === "map" ? (
                         <>
                           <p className="mt-2">你目前位置：<span className="font-semibold text-stone-950">{currentTile?.nameZh ?? "尚未站上正式地圖"}</span></p>
-                          <p>相鄰可走目標：{moveOptions.length > 0 ? moveOptions.map((tile) => tile.nameZh).join("、") : "目前沒有可直接移動目標"}</p>
+                          <p>相鄰可走目標：{moveOptions.length > 0 ? moveOptions.map((tile) => tile.nameZh).join("、") : "暫無可直接移動目標"}</p>
                         </>
                       ) : activePersonalGuideStep.id === "roster" ? (
                         <>
                           <p className="mt-2">目前最危急的是：{criticalPlayers.length > 0 ? criticalPlayers.map((player) => `${player.seatId}（SR ${player.currentSr} / SP ${player.currentSp}）`).join("、") : "暫時沒有瀕危玩家"}</p>
-                          <p>角色技能列會幫你判斷誰適合先出手。</p>
+                          <p>角色技能列可幫你判斷誰先出手。</p>
                         </>
                       ) : activePersonalGuideStep.id === "hand" ? (
                         <>
                           <p className="mt-2">你手上共有 <span className="font-semibold text-stone-950">{desktopHandItems.length}</span> 張牌。</p>
-                          <p>{desktopHandItems[0] ? `最上面那張是「${desktopHandItems[0].title}」` : "目前還沒有手牌。"}</p>
+                          <p>{desktopHandItems[0] ? `最上面那張是「${desktopHandItems[0].title}」` : "目前沒有手牌。"}</p>
                         </>
                       ) : (
                         <>
@@ -3263,7 +3140,7 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
                     </div>
                     <div className="rounded-3xl border border-amber-200 bg-amber-50 p-4 text-sm leading-7 text-amber-950">
                       <p className="font-semibold">小提醒</p>
-                      <p className="mt-2">這個引導只影響你自己，不會卡住其他玩家。之後若忘記，也可以再從上方按鈕重看。</p>
+                      <p className="mt-2">只影響你自己；忘記時可再從上方重看。</p>
                     </div>
                   </div>
                 </div>
@@ -3293,7 +3170,7 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-600">新手提示</p>
                 <h2 className="mt-1 text-2xl font-bold text-stone-950">{personalGuideContextContent[personalGuideContextPrompt].titleZh}</h2>
               </div>
-              <button className="rounded-full border border-stone-300 bg-white px-3 py-1.5 text-sm text-stone-700 hover:bg-stone-50" onClick={() => markPersonalGuideContextSeen(personalGuideContextPrompt)}>知道了</button>
+              <button className="rounded-full border border-stone-300 bg-white px-3 py-1.5 text-sm text-stone-700 hover:bg-stone-50" onClick={() => markPersonalGuideContextSeen(personalGuideContextPrompt)}>了解</button>
             </div>
             <div className="mt-4 rounded-3xl border border-amber-200 bg-amber-50 p-4 text-sm leading-7 text-amber-950">
               <p>{personalGuideContextContent[personalGuideContextPrompt].summaryZh}</p>
@@ -3305,7 +3182,7 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
             </div>
             <div className="mt-4 flex justify-end gap-2 border-t border-stone-200 pt-4">
               <button className="rounded-full border border-stone-300 bg-white px-4 py-2 text-sm text-stone-700 hover:bg-stone-50" onClick={() => { setPersonalGuidePrefs((current) => ({ ...current, guideEnabled: false, seenContexts: Array.from(new Set([...current.seenContexts, personalGuideContextPrompt])) })); setPersonalGuideContextPrompt(null); }}>不再提示</button>
-              <button className="rounded-full bg-stone-900 px-4 py-2 text-sm font-medium text-white" onClick={() => markPersonalGuideContextSeen(personalGuideContextPrompt)}>我知道了</button>
+              <button className="rounded-full bg-stone-900 px-4 py-2 text-sm font-medium text-white" onClick={() => markPersonalGuideContextSeen(personalGuideContextPrompt)}>了解</button>
             </div>
           </div>
         </div>
@@ -3326,31 +3203,40 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
           </div>
         </div>
       ) : null}
-      {merchantGuardAbilityWindow && merchantGuardAbilityWindow.actorSeat === data.viewerSeat ? (
+      {!isGuideOverlayActive && merchantGuardAbilityWindow && merchantGuardAbilityWindow.actorSeat === data.viewerSeat ? (
         <div className="fixed bottom-4 right-4 z-40 w-[min(92vw,26rem)] rounded-[28px] border border-amber-200 bg-white/95 p-4 shadow-2xl backdrop-blur">
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-600">角色技能回應</p>
           <h3 className="mt-1 text-xl font-black text-stone-950">穩住陣腳</h3>
-          <p className="mt-2 text-sm leading-6 text-stone-700">因 {merchantGuardAbilityWindow.loss.sourceLabelZh}，{merchantGuardAbilityWindow.loss.targetSeat} 即將失去 SR {merchantGuardAbilityWindow.loss.srLoss} / SP {merchantGuardAbilityWindow.loss.spLoss}。你可改由自己承受 1 點 SR。</p>
+          <p className="mt-2 text-sm leading-6 text-stone-700">因 {merchantGuardAbilityWindow.loss.sourceLabelZh}，{merchantGuardAbilityWindow.loss.targetSeat} 即將失去 SR {merchantGuardAbilityWindow.loss.srLoss} / SP {merchantGuardAbilityWindow.loss.spLoss}。你可改由自己承受 1 點 SR，替對方擋下這次損失。</p>
           <div className="mt-4 flex flex-wrap gap-2">
-            <button type="button" className="rounded-full bg-stone-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-40" disabled={submitting} onClick={() => void runAction({ type: 'resolve_role_ability', actorSeat: data.viewerSeat ?? 'P1', abilityId: 'merchant_guard', mode: 'use' })}>替 {merchantGuardAbilityWindow.loss.targetSeat} 承擔 1 SR</button>
+            <button type="button" className="rounded-full bg-stone-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-40" disabled={submitting} onClick={() => void runAction({ type: 'resolve_role_ability', actorSeat: data.viewerSeat ?? 'P1', abilityId: 'merchant_guard', mode: 'use' })}>由你承擔 1 SR</button>
             <button type="button" className="rounded-full border border-stone-300 bg-white px-4 py-2 text-sm text-stone-700" disabled={submitting} onClick={() => void runAction({ type: 'resolve_role_ability', actorSeat: data.viewerSeat ?? 'P1', abilityId: 'merchant_guard', mode: 'skip' })}>略過</button>
           </div>
         </div>
       ) : null}
-      {storytellerAbilityWindow && storytellerAbilityWindow.actorSeat === data.viewerSeat ? (
+      {!isGuideOverlayActive && storytellerAbilityWindow && storytellerAbilityWindow.actorSeat === data.viewerSeat ? (
         <div className="fixed bottom-4 right-4 z-40 w-[min(92vw,28rem)] rounded-[28px] border border-violet-200 bg-white/95 p-4 shadow-2xl backdrop-blur">
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-violet-600">角色技能回應</p>
           <h3 className="mt-1 text-xl font-black text-stone-950">協調分工</h3>
           <p className="mt-2 text-sm leading-6 text-stone-700">本輪已有至少 2 名玩家投入事件。你可令其中 1 名投入者回復 1 SP，或選擇略過。</p>
           <div className="mt-4 flex flex-wrap gap-2">
             {storytellerAbilityOptions.map((player) => (
-              <button key={`storyteller-${player.seatId}`} type="button" className="rounded-full bg-violet-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-40" disabled={submitting} onClick={() => void runAction({ type: 'resolve_role_ability', actorSeat: data.viewerSeat ?? 'P1', abilityId: 'square_storyteller', mode: 'use', targetSeat: player.seatId })}>{player.seatId}｜{player.displayName}</button>
+              <button
+                key={`storyteller-${player.seatId}`}
+                type="button"
+                title={`${player.seatId}｜${player.displayName}`}
+                className="rounded-full bg-violet-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
+                disabled={submitting}
+                onClick={() => void runAction({ type: 'resolve_role_ability', actorSeat: data.viewerSeat ?? 'P1', abilityId: 'square_storyteller', mode: 'use', targetSeat: player.seatId })}
+              >
+                {player.seatId}
+              </button>
             ))}
             <button type="button" className="rounded-full border border-stone-300 bg-white px-4 py-2 text-sm text-stone-700" disabled={submitting} onClick={() => void runAction({ type: 'resolve_role_ability', actorSeat: data.viewerSeat ?? 'P1', abilityId: 'square_storyteller', mode: 'skip' })}>略過</button>
           </div>
         </div>
       ) : null}
-      {!blockingAbilityWindow && rangerAbilitySelectable ? (
+      {!isGuideOverlayActive && !blockingAbilityWindow && rangerAbilitySelectable ? (
         <div className="fixed bottom-4 right-4 z-30 w-[min(92vw,24rem)] rounded-[24px] border border-emerald-200 bg-white/95 p-4 shadow-xl backdrop-blur">
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-600">角色技能提醒</p>
           <h3 className="mt-1 text-lg font-black text-stone-950">越野突破</h3>
@@ -3361,7 +3247,7 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
           </div>
         </div>
       ) : null}
-      {!blockingAbilityWindow && medicAbilitySelectable ? (
+      {!isGuideOverlayActive && !blockingAbilityWindow && medicAbilitySelectable ? (
         <div className="fixed bottom-4 right-4 z-30 w-[min(92vw,24rem)] rounded-[24px] border border-sky-200 bg-white/95 p-4 shadow-xl backdrop-blur">
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-600">角色技能提醒</p>
           <h3 className="mt-1 text-lg font-black text-stone-950">安定陪伴</h3>
@@ -3372,7 +3258,7 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
           </div>
         </div>
       ) : null}
-      {!blockingAbilityWindow && messengerAbilitySelectable ? (
+      {!isGuideOverlayActive && !blockingAbilityWindow && messengerAbilitySelectable ? (
         <div className="fixed bottom-4 right-4 z-30 w-[min(92vw,28rem)] rounded-[24px] border border-violet-200 bg-white/95 p-4 shadow-xl backdrop-blur">
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-violet-600">角色技能提醒</p>
           <h3 className="mt-1 text-lg font-black text-stone-950">牽起連結</h3>
@@ -3429,7 +3315,12 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
               <button className="rounded-full border border-stone-300 bg-white px-3 py-1.5 text-sm text-stone-700 hover:bg-stone-50" onClick={() => setShowWorldviewModal(false)}>關閉</button>
             </div>
             <div className="mt-4 max-h-[62vh] overflow-y-auto pr-1 rounded-3xl border border-violet-200 bg-violet-50 p-4 text-sm leading-7 text-violet-950">
-              <p>{worldViewBodyZh}</p>
+              <p>{worldViewIntroZh}</p>
+              <ul className="mt-3 space-y-2">
+                {worldViewResourceLinesZh.map((line, index) => (
+                  <li key={`worldview-modal-line-${index}`} className="rounded-2xl bg-white px-3 py-2">• {renderKeyText(line, "amber")}</li>
+                ))}
+              </ul>
               <p className="mt-3">你們需要在高壓與失序中保住彼此，優先處理事件、完成任務，並避免 SR / SP 崩盤。</p>
             </div>
           </div>
@@ -3443,7 +3334,7 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-600">本輪事件揭示</p>
                 <h2 className="mt-1 text-2xl font-bold text-stone-950">{data.snapshot.currentEvent.nameZh}</h2>
               </div>
-              <button className="rounded-full border border-stone-300 bg-white px-3 py-1.5 text-sm text-stone-700 hover:bg-stone-50" onClick={() => setShowEventRevealModal(false)}>知道了</button>
+              <button className="rounded-full border border-stone-300 bg-white px-3 py-1.5 text-sm text-stone-700 hover:bg-stone-50" onClick={() => setShowEventRevealModal(false)}>了解</button>
             </div>
             <div className="mt-4 grid gap-3 md:grid-cols-[1.1fr_0.9fr]">
               <div className="rounded-3xl border border-stone-200 bg-stone-50 p-4">
@@ -3471,7 +3362,7 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
           </div>
         </div>
       ) : null}
-      {data.snapshot.phase !== "lobby" && ((showCenterBroadcast && latestActionFeedback) || (showTurnToast && data.snapshot.activeSeat === data.viewerSeat && !showCenterBroadcast)) ? (
+      {!isGuideOverlayActive && data.snapshot.phase !== "lobby" && ((showCenterBroadcast && latestActionFeedback) || (showTurnToast && data.snapshot.activeSeat === data.viewerSeat && !showCenterBroadcast)) ? (
         <div className="pointer-events-none fixed inset-0 z-[44] flex items-center justify-center px-6">
           <div className="gh-center-broadcast w-full max-w-[812px] text-center animate-[center-broadcast-float_0.18s_ease-out]">
             <p className={`text-[11px] font-semibold tracking-[0.24em] ${showCenterBroadcast && latestActionFeedback ? centerBroadcastMetaToneClasses : "text-stone-500/95 drop-shadow-[0_2px_12px_rgba(15,23,42,0.12)]"}`}>
@@ -3494,7 +3385,32 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
                 <div>
                   <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-500">大廳準備</p>
                   <h2 className="mt-1 text-2xl font-bold text-stone-950">先完成角色指派與 AI 補位</h2>
-                  <p className="mt-2 text-sm leading-7 text-stone-600">這層是大廳階段的主操作遮罩。先決定真人與 AI 席位，再完成角色指派；準備完成後即可開始遊戲。</p>
+                  <p className="mt-2 text-sm leading-6 text-stone-600">每位真人玩家都要有角色。</p>
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <span className="rounded-full bg-stone-900 px-3 py-1 text-[11px] font-semibold text-white">
+                      房號 {data.room.roomCode}
+                    </span>
+                    <button
+                      type="button"
+                      className="rounded-full border border-stone-300 bg-white px-3 py-1 text-[11px] font-medium text-stone-700 hover:bg-stone-50"
+                      onClick={() => void copyLobbyRoomCode()}
+                    >
+                      複製房號
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-full border border-stone-300 bg-white px-3 py-1 text-[11px] font-medium text-stone-700 hover:bg-stone-50"
+                      onClick={() => void copyLobbyObserverLink()}
+                    >
+                      複製旁觀連結
+                    </button>
+                  </div>
+                  <p className="mt-2 text-xs leading-5 text-stone-500">玩家用房號加入；旁觀者可直接用旁觀連結進入。</p>
+                  {lobbyShareFeedbackZh ? (
+                    <p className="mt-2 inline-flex rounded-full bg-emerald-50 px-3 py-1 text-[11px] font-medium text-emerald-700">
+                      {lobbyShareFeedbackZh}
+                    </p>
+                  ) : null}
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <span className={`rounded-full px-3 py-1 text-xs font-medium ${missingHumanRoleSeats.length === 0 ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
@@ -3515,12 +3431,12 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
                   <div className="flex items-center justify-between gap-2">
                     <div>
                       <p className="text-sm font-semibold text-stone-900">角色介紹</p>
-                      <p className="mt-1 text-xs leading-6 text-stone-600">這裡只做角色認識；真正指派仍在右側進行。</p>
+                      <p className="mt-1 text-xs leading-5 text-stone-600">先看技能與起始值。</p>
                     </div>
                     <span className="rounded-full bg-stone-100 px-2.5 py-1 text-[10px] text-stone-600">共 {roleCatalogEntries.length} 名</span>
                   </div>
                   <div className="mt-3 flex items-center justify-between gap-2 rounded-2xl bg-stone-50 px-3 py-2 text-[11px] text-stone-600">
-                    <span>已被其他席位選擇的角色會在此處變灰。</span>
+                    <span>已選角色會變灰。</span>
                     <span className="rounded-full bg-white px-2.5 py-1 text-[10px] text-stone-600">不可重複選擇</span>
                   </div>
                   <div className="mt-3 grid min-h-0 flex-1 content-start gap-2 overflow-y-auto pr-1">
@@ -3528,7 +3444,7 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
                       <div
                         key={`lobby-role-catalog-${role.roleId}`}
                         className={[
-                          "rounded-2xl border px-3 py-3 transition",
+                          "rounded-2xl border px-3 py-2 transition",
                           role.isTaken
                             ? "border-stone-200 bg-stone-200/75 text-stone-500 opacity-75"
                             : "border-violet-200 bg-violet-50/70 text-stone-800",
@@ -3543,8 +3459,8 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
                             {role.statusZh}
                           </span>
                         </div>
-                        <p className="mt-2 text-xs leading-6 text-stone-700">{role.abilitySummaryZh}</p>
-                        <p className="mt-2 text-[11px] text-stone-500">起始 SR {role.startingSr} / SP {role.startingSp}</p>
+                        <p className="mt-1 text-xs leading-[1.4] text-stone-700">{role.abilitySummaryZh}</p>
+                        <p className="mt-1 text-[11px] leading-4 text-stone-500">起始 SR {role.startingSr} / SP {role.startingSp}</p>
                       </div>
                     ))}
                   </div>
@@ -3553,10 +3469,10 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
                 <section className="rounded-[24px] border border-stone-200 bg-white p-4 shadow-2xl">
                   <div className="flex items-center justify-between gap-2">
                     <div>
-                      <p className="text-sm font-semibold text-stone-900">選角與大廳準備</p>
-                      <p className="mt-1 text-xs leading-6 text-stone-600">保留原本主操作區：先決定真人與 AI 補位，再替各席位指派角色，最後開始遊戲。</p>
+                      <p className="text-sm font-semibold text-stone-900">席位與角色指派</p>
+                      <p className="mt-1 text-xs leading-5 text-stone-600">先看誰是 AI，再替各席位選角色。</p>
                     </div>
-                    <span className="rounded-full bg-stone-100 px-3 py-1 text-xs text-stone-600">目標：每位真人玩家都有角色</span>
+                    <span className="rounded-full bg-stone-100 px-3 py-1 text-xs text-stone-600">真人席位都要有角色</span>
                   </div>
 
                   <div className="mt-4 grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
@@ -3564,7 +3480,7 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
                       <div className="flex items-center justify-between gap-2">
                         <div>
                           <p className="text-sm font-semibold text-stone-900">角色指派</p>
-                          <p className="mt-1 text-xs leading-6 text-stone-600">席位卡只保留角色名稱；若角色已被其他席位選走，這裡會直接不可重複選擇。</p>
+                          <p className="mt-1 text-xs leading-5 text-stone-600">已選角色不能重複指派。</p>
                         </div>
                         <span className="rounded-full bg-white px-2.5 py-1 text-[10px] text-stone-600">{participantPlayers.length} 席位</span>
                       </div>
@@ -3640,12 +3556,12 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
                     </div>
 
                     <aside className="space-y-4 rounded-[22px] border border-stone-200 bg-stone-50 p-4">
-                      <div className="rounded-2xl border border-stone-200 bg-white p-4">
-                        <div className="flex items-center justify-between gap-2">
-                          <div>
-                            <p className="text-sm font-semibold text-stone-900">AI 補位</p>
-                            <p className="mt-1 text-xs leading-6 text-stone-600">一鍵補滿 AI、全部改回玩家，或逐一切換 P2 / P3 / P4。</p>
-                          </div>
+                        <div className="rounded-2xl border border-stone-200 bg-white p-4">
+                          <div className="flex items-center justify-between gap-2">
+                            <div>
+                              <p className="text-sm font-semibold text-stone-900">AI 補位</p>
+                              <p className="mt-1 text-xs leading-5 text-stone-600">可一鍵補滿，也可逐席切換。</p>
+                            </div>
                           {data.viewerRole === "host" ? (
                             <div className="flex flex-wrap gap-2">
                               <button className="rounded-full border border-stone-300 bg-white px-3 py-1.5 text-[11px] font-medium text-stone-700 hover:bg-stone-50" disabled={submitting || !data.viewerSeat} onClick={() => void updateRoomConfigPatch({ aiSeatIds: ["P2", "P3", "P4"] })}>一鍵 AI 補位</button>
@@ -3675,18 +3591,10 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
                       </div>
 
                       <div className={`rounded-2xl border p-4 text-sm leading-7 ${missingHumanRoleSeats.length === 0 ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-amber-200 bg-amber-50 text-amber-900"}`}>
-                        <p className="font-semibold">開始遊戲前檢查</p>
+                        <p className="font-semibold">開始前檢查</p>
                         <p className="mt-2">{startGameHintZh}</p>
                       </div>
 
-                      <div className="rounded-2xl border border-stone-200 bg-white p-4 text-sm leading-7 text-stone-700">
-                        <p className="font-semibold text-stone-900">現在這頁是做什麼的？</p>
-                        <ul className="mt-2 space-y-1.5 text-sm">
-                          <li>• 先決定哪些座位由真人玩、哪些由 AI 補位。</li>
-                          <li>• 再替真人玩家選角色。</li>
-                          <li>• 準備完成後，由房主按「開始遊戲」。</li>
-                        </ul>
-                      </div>
                     </aside>
                   </div>
                 </section>
@@ -3697,7 +3605,7 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
       ) : null}
       <div className="mx-auto mt-4 max-w-[1500px] space-y-4">
         <div className="space-y-4 xl:hidden">
-        <div className="xl:hidden px-1">
+        <div className="px-1">
           <div className="grid grid-cols-3 gap-2">
             <button type="button" className="rounded-2xl border border-stone-200 bg-white px-3 py-3 text-left shadow-sm" onClick={() => setShowMobileTasksDrawer(true)}>
               <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-stone-500">任務</p>
@@ -3707,85 +3615,16 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
             <button type="button" className="rounded-2xl border border-stone-200 bg-white px-3 py-3 text-left shadow-sm" onClick={() => setShowMobileHandDrawer(true)}>
               <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-stone-500">手牌</p>
               <p className="mt-1 text-sm font-semibold text-stone-950">{viewerPlayerState?.handCardIds.length ?? 0} / 3</p>
-              <p className="mt-1 text-[11px] text-stone-600">點開後可直接選牌</p>
+              <p className="mt-1 text-[11px] text-stone-600">點一下查看</p>
             </button>
             <button type="button" className="rounded-2xl border border-stone-200 bg-white px-3 py-3 text-left shadow-sm" onClick={() => setShowMobileActionFeedDrawer(true)}>
               <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-stone-500">最近動作</p>
               <p className="mt-1 text-sm font-semibold text-stone-950">{recentActionFeed.length} 筆</p>
-              <p className="mt-1 text-[11px] text-stone-600">多人局不容易漏看</p>
+              <p className="mt-1 text-[11px] text-stone-600">查看紀錄</p>
             </button>
           </div>
         </div>
-        <section className="rounded-[28px] border border-stone-200 bg-white p-3 shadow-sm xl:hidden">
-          <div className="hidden xl:grid xl:grid-cols-[minmax(0,1.45fr)_auto_minmax(250px,0.95fr)] xl:items-start xl:gap-3">
-            <div className="rounded-[22px] border border-stone-200 bg-stone-50 px-4 py-3">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-stone-500">本輪事件</p>
-                  <h2 className="mt-1 truncate text-[18px] font-bold text-stone-950">{latestEventNameZh}</h2>
-                </div>
-                {eventProgress ? <HoverInfo label={<span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-[10px] font-medium text-stone-700">投入 {eventProgress.distinctContributorCount} 人</span>} content={eventProgress.contributorNamesZh.length > 0 ? `已投入玩家：${eventProgress.contributorNamesZh.join("、")}` : "無人投入"} align="left" /> : null}
-              </div>
-              {data.snapshot.currentEvent ? (
-                <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] text-stone-700">
-                  <span className="rounded-full bg-white px-2.5 py-1 font-medium">解決：<span className="font-bold text-rose-700">SR {data.snapshot.currentEvent.requirement.srRequired}</span> / <span className="font-bold text-rose-700">SP {data.snapshot.currentEvent.requirement.spRequired}</span></span>
-                  {eventProgress ? <span className="rounded-full bg-white px-2.5 py-1">缺：<span className="font-bold text-rose-700">SR {eventProgress.remainingSr}</span> / <span className="font-bold text-rose-700">SP {eventProgress.remainingSp}</span></span> : null}
-                  <HoverInfo label={<span className="rounded-full bg-rose-600 px-2.5 py-1 text-white">未解懲罰</span>} content={data.snapshot.currentEvent.unresolvedPenaltyTextZh} align="left" />
-                </div>
-              ) : (
-                <p className="mt-2 text-[11px] text-stone-600">尚未翻出事件，系統會在新一輪開始時自動揭示。</p>
-              )}
-            </div>
-
-            <div className="rounded-[22px] border border-amber-200 bg-amber-50 px-3 py-3">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-900">投入事件</p>
-              {canViewerQuickInvest ? (
-                <div className="mt-2 flex flex-col gap-1.5">
-                  <div className="flex items-center gap-1.5">
-                    <input type="number" min={0} value={investSr} onChange={(e) => setInvestSr(Number(e.target.value))} className="w-14 rounded-full border border-amber-200 bg-white px-2 py-1 text-[11px] text-stone-900" placeholder="SR" />
-                    <input type="number" min={0} value={investSp} onChange={(e) => setInvestSp(Number(e.target.value))} className="w-14 rounded-full border border-amber-200 bg-white px-2 py-1 text-[11px] text-stone-900" placeholder="SP" />
-                    <button className="rounded-full bg-stone-900 px-3 py-1.5 text-[11px] font-medium text-white disabled:opacity-40" disabled={submitting || !data.viewerSeat || !eventProgress} onClick={() => runAction({ type: "invest_event", actorSeat: data.viewerSeat ?? "P1", srPaid: investSr, spPaid: investSp, convertOne: selectedInvestConversion || undefined })}>投入</button>
-                  </div>
-                  {investConversionOptions.length > 0 ? (
-                    <div className="flex flex-wrap items-center gap-1">
-                      <span className="text-[10px] font-medium text-violet-700">資源轉換</span>
-                      {investConversionOptions.map((option) => (
-                        <button
-                          key={`wide-invest-convert-${option.value || "none"}`}
-                          type="button"
-                          className={[
-                            "rounded-full border px-2 py-0.5 text-[9px] transition",
-                            option.selected
-                              ? "border-violet-500 bg-violet-600 text-white"
-                              : option.disabled
-                                ? "cursor-not-allowed border-stone-200 bg-stone-100 text-stone-400"
-                                : "border-violet-200 bg-white text-violet-800 hover:border-violet-400 hover:bg-violet-50",
-                          ].join(" ")}
-                          disabled={option.disabled}
-                          onClick={() => setSelectedInvestConversion(option.value)}
-                        >
-                          {option.labelZh}
-                        </button>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-              ) : (
-                <p className="mt-2 max-w-[160px] text-[11px] leading-5 text-amber-950">現在不是你的行動窗，或目前沒有可投入的事件。</p>
-              )}
-            </div>
-
-            <div className="flex flex-wrap items-center justify-end gap-1.5 rounded-[22px] border border-stone-200 bg-stone-50 px-3 py-3 text-[10.5px] text-stone-700">
-              <span className="rounded-full bg-white px-2.5 py-1">回合 {headerRoundValueZh}</span>
-              <span className="rounded-full bg-white px-2.5 py-1">壓力 {data.snapshot.pressure}</span>
-              <span className="rounded-full bg-white px-2.5 py-1">任務 {headerTaskValueZh}</span>
-              <span className="rounded-full bg-amber-100 px-2.5 py-1 font-medium text-amber-900">輪到 {headerCurrentActorZh}</span>
-              <span className="rounded-full bg-white px-2.5 py-1">AP {viewerPlayerState?.remainingAp ?? "—"}</span>
-              <span className="rounded-full bg-violet-100 px-2.5 py-1 text-violet-800">地格 {currentTile?.nameZh ?? (isLobbyMapPreview ? "中央大道預覽" : viewerPlayerState?.positionTileId ?? "—")}</span>
-              {data.snapshot.phase !== "lobby" ? <span className="rounded-full bg-white px-2.5 py-1 text-stone-500">剩餘 {remainingDays} 天</span> : null}
-            </div>
-          </div>
-
+        <section className="rounded-[28px] border border-stone-200 bg-white p-3 shadow-sm">
           <div className={`mb-2.5 rounded-[24px] border border-stone-200 bg-stone-50 px-3 py-2 ${pulseTaskRail ? "animate-pulse" : ""}`}>
             <div className="flex items-center justify-between gap-3">
               <div>
@@ -3908,23 +3747,40 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
                     </div>
                     <span className={["rounded-full px-2.5 py-1 text-[10px] font-medium", selectedTaskSurfaceStatus.tone === "emerald" ? "bg-emerald-100 text-emerald-800" : selectedTaskSurfaceStatus.tone === "amber" ? "bg-amber-100 text-amber-800" : selectedTaskSurfaceStatus.tone === "sky" ? "bg-sky-100 text-sky-800" : "bg-stone-100 text-stone-700"].join(" ")}>{selectedTaskSurfaceStatus.badgeZh}</span>
                   </div>
-                  <p className="mt-2 text-[11px] leading-5 text-stone-700">條件：{selectedTask.completionHintZh}</p>
-                  <p className="mt-1 text-[11px] leading-5 text-stone-700">獎勵：{selectedTask.rewardTextZh}</p>
-                  <p className="mt-2 rounded-2xl bg-stone-50 px-3 py-2 text-[11px] leading-5 text-stone-800">{selectedTaskSurfaceStatus.summaryZh}</p>
-                  <div className="mt-2 rounded-2xl border border-stone-200 bg-stone-50 px-3 py-2">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-stone-500">你目前還差什麼</p>
-                    <ul className="mt-1 space-y-1 text-[11px] leading-5 text-stone-700">
-                      {selectedTaskSurfaceStatus.reasonsZh.slice(0, 3).map((reason) => <li key={reason}>• {reason}</li>)}
-                    </ul>
+                  <div className="mt-2 rounded-2xl bg-emerald-50 px-3 py-2 text-[11px] leading-5 text-emerald-900">{selectedTaskSurfaceStatus.summaryZh}</div>
+                  <div className="mt-2 space-y-1 text-[11px] leading-5 text-stone-700">
+                    <p><span className="font-semibold text-stone-900">條件：</span>{selectedTask.completionHintZh}</p>
+                    <p><span className="font-semibold text-stone-900">獎勵：</span>{selectedTask.rewardTextZh}</p>
                   </div>
+                  {selectedTaskDetailLinesZh.length > 0 ? (
+                    <div className="mt-2 rounded-2xl border border-stone-200 bg-stone-50 px-3 py-2">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-stone-500">{selectedTaskSurfaceStatus.canDeclare ? "目前進度" : "目前差什麼"}</p>
+                      <ul className="mt-1 space-y-1 text-[11px] leading-5 text-stone-700">
+                        {selectedTaskDetailLinesZh.slice(0, 3).map((reason) => <li key={reason}>• {reason}</li>)}
+                      </ul>
+                    </div>
+                  ) : null}
+                  {!selectedTaskSurfaceStatus.canDeclare ? (
+                    <div className="mt-2 rounded-2xl border border-stone-200 bg-white px-3 py-2">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-stone-500">目前不可宣告</p>
+                      <p className="mt-1 text-[11px] leading-5 text-stone-600">{selectedTaskSurfaceStatus.reasonsZh[0] ?? selectedTaskSurfaceStatus.summaryZh}</p>
+                    </div>
+                  ) : selectedTaskNoteLinesZh.length > 0 ? (
+                    <div className="mt-2 rounded-2xl border border-stone-200 bg-white px-3 py-2">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-stone-500">補充</p>
+                      <ul className="mt-1 space-y-1 text-[11px] leading-5 text-stone-700">
+                        {selectedTaskNoteLinesZh.map((reason) => <li key={reason}>• {reason}</li>)}
+                      </ul>
+                    </div>
+                  ) : null}
                   <button type="button" className="mt-3 w-full rounded-2xl bg-emerald-600 px-3 py-2.5 text-sm font-medium text-white disabled:opacity-40" disabled={!selectedTaskSurfaceStatus.canDeclare || submitting || !data.viewerSeat || data.viewerRole === "observer"} onClick={() => void runAction({ type: "declare_task", actorSeat: data.viewerSeat ?? "P1", taskId: selectedTask.taskId })}>
-                    {selectedTaskSurfaceStatus.canDeclare ? "宣告完成" : "目前不可宣告"}
+                    {selectedTaskSurfaceStatus.canDeclare ? "宣告任務" : "目前不可宣告"}
                   </button>
                 </div>
               ) : (
                 <div className="rounded-2xl border border-dashed border-emerald-200 bg-white px-3 py-4 text-[11px] leading-5 text-stone-600 shadow-sm">
                   <p className="font-semibold text-stone-900">任務詳情</p>
-                  <p className="mt-1">先點上方任務列任一任務，這裡就會顯示條件、獎勵、阻塞原因與宣告按鈕。</p>
+                  <p className="mt-1">選上方任務，看條件與宣告。</p>
                 </div>
               )}
 
@@ -3940,6 +3796,7 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
                   {(viewerPlayerState?.handCardIds.length ?? 0) > 0 ? (
                     viewerPlayerState?.handCardIds.map((cardId, index) => {
                       const card = ACTION_CARD_DEFINITION_MAP[cardId];
+                      const instanceKey = buildHandCardInstanceKey(cardId, index);
                       return (
                         <HandPreviewCard
                           key={`top-hand-${cardId}-${index}`}
@@ -3947,8 +3804,8 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
                           category={card?.category ?? "support"}
                           description={card?.rulesTextZh ?? "尚未載入牌面文字"}
                           note={card?.noteZh ?? ""}
-                          selected={selectedActionCardId === cardId}
-                          onClick={() => toggleSelectedActionCard(cardId)}
+                          selected={selectedActionCardInstanceKey === instanceKey}
+                          onClick={() => toggleSelectedActionCard(cardId, instanceKey)}
                         />
                       );
                     })
@@ -3999,15 +3856,15 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
                   ))}
                 </div>
               ) : (
-                <p className="mt-2 rounded-2xl bg-stone-50 px-3 py-3 text-[11px] leading-5 text-stone-600">目前還沒有新的操作回饋；多人局進行後，這裡會幫你補最近發生了什麼。</p>
+                <p className="mt-2 rounded-2xl bg-stone-50 px-3 py-3 text-[11px] leading-5 text-stone-600">暫無新回饋。</p>
               )}
             </div>
 
             <div className="rounded-[22px] border border-stone-200 bg-white px-3 py-2.5 shadow-sm">
               <div className="flex items-center justify-between gap-2">
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-stone-500">流程 / 能力提示</p>
-                  <h3 className="mt-0.5 text-[13px] font-bold text-stone-950">現在最該注意的資訊</h3>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-stone-500">流程 / 能力</p>
+                  <h3 className="mt-0.5 text-[13px] font-bold text-stone-950">目前重點</h3>
                 </div>
                 <span className="rounded-full bg-stone-100 px-2.5 py-1 text-[10px] font-medium text-stone-700">{phaseLabel(data.snapshot.phase)}</span>
               </div>
@@ -4035,14 +3892,31 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
                   </div>
                   <span className={["rounded-full px-3 py-1 text-xs font-medium", selectedTaskSurfaceStatus.tone === "emerald" ? "bg-emerald-100 text-emerald-800" : selectedTaskSurfaceStatus.tone === "amber" ? "bg-amber-100 text-amber-800" : selectedTaskSurfaceStatus.tone === "sky" ? "bg-sky-100 text-sky-800" : "bg-stone-100 text-stone-700"].join(" ")}>{selectedTaskSurfaceStatus.badgeZh}</span>
                 </div>
-                <p className="mt-3 text-sm leading-6 text-stone-700">條件：{selectedTask.completionHintZh}</p>
-                <p className="mt-1 text-sm leading-6 text-stone-700">獎勵：{selectedTask.rewardTextZh}</p>
-                <p className="mt-3 rounded-2xl bg-white px-3 py-3 text-sm leading-6 text-stone-800">{selectedTaskSurfaceStatus.summaryZh}</p>
-                <ul className="mt-3 space-y-2 text-sm leading-6 text-stone-700">
-                  {selectedTaskSurfaceStatus.reasonsZh.slice(0, 4).map((reason) => <li key={reason} className="rounded-2xl bg-white px-3 py-2">{reason}</li>)}
-                </ul>
+                <div className="mt-3 rounded-2xl bg-white px-3 py-3 text-sm leading-6 text-stone-800">{selectedTaskSurfaceStatus.summaryZh}</div>
+                <div className="mt-3 space-y-1 text-sm leading-6 text-stone-700">
+                  <p><span className="font-semibold text-stone-900">條件：</span>{selectedTask.completionHintZh}</p>
+                  <p><span className="font-semibold text-stone-900">獎勵：</span>{selectedTask.rewardTextZh}</p>
+                </div>
+                {selectedTaskDetailLinesZh.length > 0 ? (
+                  <ul className="mt-3 space-y-2 text-sm leading-6 text-stone-700">
+                    {selectedTaskDetailLinesZh.slice(0, 4).map((reason) => <li key={reason} className="rounded-2xl bg-white px-3 py-2">{reason}</li>)}
+                  </ul>
+                ) : null}
+                {!selectedTaskSurfaceStatus.canDeclare ? (
+                  <div className="mt-3 rounded-2xl bg-white px-3 py-3 text-sm leading-6 text-stone-700">
+                    <p className="font-semibold text-stone-900">目前不可宣告</p>
+                    <p className="mt-1">{selectedTaskSurfaceStatus.reasonsZh[0] ?? selectedTaskSurfaceStatus.summaryZh}</p>
+                  </div>
+                ) : selectedTaskNoteLinesZh.length > 0 ? (
+                  <div className="mt-3 rounded-2xl bg-white px-3 py-3 text-sm leading-6 text-stone-700">
+                    <p className="font-semibold text-stone-900">補充</p>
+                    <ul className="mt-1 space-y-1">
+                      {selectedTaskNoteLinesZh.map((reason) => <li key={reason}>• {reason}</li>)}
+                    </ul>
+                  </div>
+                ) : null}
                 <button type="button" className="mt-3 w-full rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-medium text-white disabled:opacity-40" disabled={!selectedTaskSurfaceStatus.canDeclare || submitting || !data.viewerSeat || data.viewerRole === "observer"} onClick={() => void runAction({ type: "declare_task", actorSeat: data.viewerSeat ?? "P1", taskId: selectedTask.taskId })}>
-                  {selectedTaskSurfaceStatus.canDeclare ? "宣告完成" : "目前不可宣告"}
+                  {selectedTaskSurfaceStatus.canDeclare ? "宣告任務" : "目前不可宣告"}
                 </button>
               </div>
             ) : null}
@@ -4065,6 +3939,7 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
           <div className="space-y-3">
             {(viewerPlayerState?.handCardIds.length ?? 0) > 0 ? viewerPlayerState?.handCardIds.map((cardId, index) => {
               const card = ACTION_CARD_DEFINITION_MAP[cardId];
+              const instanceKey = buildHandCardInstanceKey(cardId, index);
               return (
                 <div key={`mobile-hand-${cardId}-${index}`} className="rounded-2xl border border-stone-200 bg-white p-3">
                   <div className="flex items-start justify-between gap-2">
@@ -4072,13 +3947,13 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
                       <p className="text-sm font-semibold text-stone-950">{card?.nameZh ?? cardId}</p>
                       <p className="mt-1 text-xs leading-5 text-stone-600">{card?.rulesTextZh ?? "尚未載入牌面文字"}</p>
                     </div>
-                    <button type="button" className={["rounded-full px-3 py-1 text-xs font-medium", selectedActionCardId === cardId ? "bg-stone-900 text-white" : "bg-stone-100 text-stone-700"].join(" ")} onClick={() => toggleSelectedActionCard(cardId)}>
-                      {selectedActionCardId === cardId ? "已選" : "選這張"}
+                    <button type="button" className={["rounded-full px-3 py-1 text-xs font-medium", selectedActionCardInstanceKey === instanceKey ? "bg-stone-900 text-white" : "bg-stone-100 text-stone-700"].join(" ")} onClick={() => toggleSelectedActionCard(cardId, instanceKey)}>
+                      {selectedActionCardInstanceKey === instanceKey ? "已選" : "選這張"}
                     </button>
                   </div>
                 </div>
               );
-            }) : <p className="rounded-2xl bg-stone-50 px-3 py-4 text-sm text-stone-600">目前沒有手牌。</p>}
+            }) : <p className="rounded-2xl bg-stone-50 px-3 py-4 text-sm text-stone-600">沒有手牌。</p>}
           </div>
         </MobileBottomDrawer>
 
@@ -4090,167 +3965,9 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
                 <p className={feedback.tone === "success" ? "mt-1 text-sm text-emerald-700" : "mt-1 text-sm text-rose-700"}>{feedback.text}</p>
                 {feedback.detailsZh.length > 0 ? <ul className="mt-2 space-y-1 text-xs leading-5 text-stone-600">{feedback.detailsZh.slice(0, 3).map((detail) => <li key={detail}>• {detail}</li>)}</ul> : null}
               </div>
-            )) : <p className="rounded-2xl bg-stone-50 px-3 py-4 text-sm text-stone-600">目前還沒有新的操作回饋。</p>}
+            )) : <p className="rounded-2xl bg-stone-50 px-3 py-4 text-sm text-stone-600">暫無新回饋。</p>}
           </div>
         </MobileBottomDrawer>
-
-        <div className="hidden grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
-          <section className="rounded-[28px] border border-stone-200 bg-white p-3 shadow-sm">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-              <div className="space-y-3">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-stone-500">目前事件</p>
-                  <h2 className="mt-1 text-2xl font-bold text-stone-950">{latestEventNameZh}</h2>
-                </div>
-                {data.snapshot.currentEvent ? (
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div className="rounded-2xl bg-stone-50 p-4">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">解決條件</p>
-                      <p className="mt-2 text-sm leading-7 text-stone-800">{data.snapshot.currentEvent.rulesTextZh}</p>
-                      <div className="mt-3 flex flex-wrap gap-2 text-sm">
-                        <span className="rounded-full bg-white px-3 py-1 font-medium text-stone-700">需求 SR {data.snapshot.currentEvent.requirement.srRequired}</span>
-                        <span className="rounded-full bg-white px-3 py-1 font-medium text-stone-700">需求 SP {data.snapshot.currentEvent.requirement.spRequired}</span>
-                        {eventProgress ? <span className="rounded-full bg-white px-3 py-1 font-medium text-stone-700">目前投入 {eventProgress.distinctContributorCount} 人次</span> : null}
-                      </div>
-                    </div>
-                    <div className="rounded-2xl bg-stone-900 p-4 text-stone-50">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-stone-300">未解後果</p>
-                      <p className="mt-2 text-sm leading-7">{data.snapshot.currentEvent.unresolvedPenaltyTextZh}</p>
-                      {eventProgress ? (
-                        <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
-                          <div className="rounded-2xl bg-white/10 px-3 py-2">尚缺 SR {eventProgress.remainingSr}</div>
-                          <div className="rounded-2xl bg-white/10 px-3 py-2">尚缺 SP {eventProgress.remainingSp}</div>
-                        </div>
-                      ) : null}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="rounded-2xl bg-stone-50 p-4 text-sm leading-7 text-stone-700">
-                    目前尚未翻出事件，進入危機階段後這裡會顯示本輪事件條件與未解後果。
-                  </div>
-                )}
-              </div>
-              <div className="grid min-w-[240px] gap-3 sm:grid-cols-2 xl:grid-cols-1">
-                <SurfaceMetric label="你的狀態" value={data.viewerRole === "observer" ? "觀察者" : `${data.viewerSeat ?? "—"}｜${uiState.roomRoleLabelZh}`} hint={uiState.viewerStatusHintZh} />
-                <SurfaceMetric label="流程提示" value={phaseLabel(data.snapshot.phase)} hint={uiState.blockingWindowSummaryZh ?? uiState.phaseSummaryZh} />
-              </div>
-            </div>
-          </section>
-
-          <section className="rounded-[28px] border border-stone-200 bg-white p-3 shadow-sm">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-stone-500">主操作</p>
-                <h2 className="mt-1 text-xl font-bold text-stone-950">快速推進</h2>
-              </div>
-              <span className="rounded-full bg-stone-100 px-3 py-1 text-xs font-medium text-stone-600">
-                {data.snapshot.phase === "campfire" ? "營火處理中" : "主流程中"}
-              </span>
-            </div>
-            <div className="mt-4 grid gap-3">
-              {data.viewerRole === "observer" ? (
-                <div className="rounded-2xl bg-stone-50 px-4 py-3 text-sm leading-7 text-stone-700">
-                  你目前是觀察者，可看局面、紀錄與階段提示；正式操作請展開下方「進階操作與診斷」或切回玩家身分。
-                </div>
-              ) : null}
-              <div className="grid gap-2 sm:grid-cols-2">
-                <button
-                  className="rounded-2xl bg-stone-900 px-4 py-3 text-sm font-medium text-white disabled:opacity-40"
-                  disabled={!uiState.canStartGame || submitting}
-                  onClick={() => runAction({ type: "start_game", actorSeat: data.viewerSeat ?? "P1" })}
-                >
-                  開始遊戲
-                </button>
-                <button
-                  className="rounded-2xl bg-amber-600 px-4 py-3 text-sm font-medium text-white disabled:opacity-40"
-                  disabled={!uiState.canStartRound || submitting}
-                  onClick={() => runAction({ type: "start_round", actorSeat: data.viewerSeat ?? "P1" })}
-                >
-                  開始本輪
-                </button>
-                <button
-                  className="rounded-2xl bg-rose-700 px-4 py-3 text-sm font-medium text-white disabled:opacity-40"
-                  disabled={!uiState.canResolveCampfire || submitting}
-                  onClick={() => runAction({ type: "resolve_campfire", actorSeat: data.viewerSeat ?? "P1" })}
-                >
-                  處理營火
-                </button>
-                <button
-                  className="rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm font-medium text-stone-700 disabled:opacity-40"
-                  disabled={submitting || !data.viewerSeat || data.viewerRole !== "host"}
-                  onClick={() => runAction({ type: "run_ai_turn", actorSeat: data.viewerSeat ?? "P1" })}
-                >
-                  AI 下一位
-                </button>
-              </div>
-              <div className="rounded-2xl bg-stone-50 px-4 py-3 text-sm leading-7 text-stone-700">
-                <p className="font-semibold text-stone-900">目前提醒</p>
-                <p className="mt-1">{data.snapshot.phase === "lobby" ? startGameHintZh : actionDisabledReasonZh ?? uiState.phaseSummaryZh}</p>
-                {uiState.hostActionReasonZh ? <p className="mt-1 text-stone-500">{uiState.hostActionReasonZh}</p> : null}
-              </div>
-            </div>
-          </section>
-        </div>
-
-        {data.viewerRole === "host" && data.snapshot.phase === "lobby" ? (
-          <section className="hidden rounded-[28px] border border-stone-200 bg-white p-4 shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-stone-500">大廳設定</p>
-                <h2 className="mt-1 text-xl font-bold text-stone-950">AI 補位</h2>
-              </div>
-              <span className="rounded-full bg-stone-100 px-3 py-1 text-sm font-medium text-stone-700">
-                目前：{data.snapshot.roomConfig.aiSeatIds.length > 0 ? data.snapshot.roomConfig.aiSeatIds.join("、") : "未啟用"}
-              </span>
-            </div>
-            <p className="mt-2 text-sm leading-7 text-stone-600">
-              你可以在開局前直接把空座位改成 AI 補位。若 AI 尚未指派角色，開局時會從剩餘角色自動補齊。
-            </p>
-            <div className="mt-4 flex flex-wrap gap-2">
-              {(["P2", "P3", "P4"] as SeatId[]).map((seatId) => {
-                const enabled = data.snapshot.roomConfig.aiSeatIds.includes(seatId);
-                return (
-                  <button
-                    key={`quick-ai-${seatId}`}
-                    className={`rounded-2xl px-4 py-3 text-sm font-medium ${enabled ? "bg-stone-900 text-white" : "border border-stone-300 bg-white text-stone-700"}`}
-                    disabled={submitting || !data.viewerSeat}
-                    onClick={() => {
-                      const current = new Set(data.snapshot.roomConfig.aiSeatIds);
-                      if (current.has(seatId)) current.delete(seatId); else current.add(seatId);
-                      void updateRoomConfigPatch({ aiSeatIds: Array.from(current).sort() as SeatId[] });
-                    }}
-                  >
-                    {seatId} {enabled ? "改回玩家" : "加入 AI"}
-                  </button>
-                );
-              })}
-            </div>
-          </section>
-        ) : null}
-
-        <section className="hidden rounded-[28px] border border-stone-200 bg-white p-4 shadow-sm">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-stone-500">共同任務</p>
-              <h2 className="mt-1 text-xl font-bold text-stone-950">本局目標列</h2>
-            </div>
-            <span className="rounded-full bg-stone-100 px-3 py-1 text-sm font-medium text-stone-700">已完成 {completedTasks} / {totalTasks}</span>
-          </div>
-          <div className="mt-4 grid auto-cols-[minmax(220px,1fr)] grid-flow-col gap-3 overflow-x-auto pb-1 xl:grid-flow-row xl:auto-cols-auto xl:grid-cols-5">
-            {data.snapshot.tasks.map((task) => (
-              <TaskRibbonCard
-                key={task.taskId}
-                title={task.nameZh}
-                subtitle={task.completionHintZh}
-                reward={task.rewardTextZh}
-                isDone={task.completionCheckedByHost}
-                isSelected={selectedTaskId === task.taskId}
-                onClick={() => setSelectedTaskId(task.taskId)}
-              />
-            ))}
-          </div>
-        </section>
-
         </div>
 
         <div className="hidden xl:block">
@@ -4263,7 +3980,6 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
             eventPenaltyZh={data.snapshot.currentEvent?.unresolvedPenaltyTextZh ?? "目前沒有未解懲罰"}
             eventMetaPills={[]}
             eventChannelSections={buildEventCardChannels(data.snapshot)}
-            eventReservedSlots={[]}
             roundValueZh={headerRoundValueZh}
             pressureValue={data.snapshot.pressure}
             remainingDaysZh={data.snapshot.phase !== "lobby" ? `剩餘 ${remainingDays} 天` : null}
@@ -4318,148 +4034,37 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
           />
         </div>
 
-        <section className="hidden">
-          <aside className="rounded-[28px] border border-stone-200 bg-white p-3 shadow-sm">
-            <div className="flex items-center justify-between gap-2">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-stone-500">玩家狀態</p>
-                <h2 className="mt-0.5 text-base font-bold text-stone-950">隊伍總覽</h2>
-              </div>
-              <span className="rounded-full bg-stone-100 px-3 py-1 text-xs font-medium text-stone-600">壓力 {data.snapshot.pressure}</span>
-            </div>
-            <div className="mt-4 space-y-3">
-              {participantPlayers.map((player) => (
-                <PlayerRosterCard
-                  key={`surface-${player.seatId}`}
-                  seat={player.seatId}
-                  name={player.displayName}
-                  roleName={player.roleNameZh ?? "未指派角色"}
-                  sr={player.currentSr}
-                  sp={player.currentSp}
-                  ap={player.remainingAp}
-                  companionUsed={player.companionTokensRemaining <= 0}
-                  isActive={player.seatId === data.snapshot.activeSeat}
-                  isViewer={player.seatId === data.viewerSeat}
-                  isAi={player.isAi}
-                  positionTileId={player.positionTileId}
-                  roleAbilitySummary={getRoleLoadout(player.roleId)?.abilitySummaryZh}
-                />
-              ))}
-            </div>
-          </aside>
-
-          <section className="rounded-[28px] border border-stone-200 bg-white p-3 shadow-sm">
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-stone-500">主要場域</p>
-                <h2 className="mt-1 text-xl font-bold text-stone-950">地圖與位置關係</h2>
-              </div>
-              <div className="flex flex-wrap gap-2 text-xs text-stone-600">
-                <span className="rounded-full bg-stone-100 px-3 py-1">輪到：{data.snapshot.activeSeat ?? "—"}</span>
-                <span className="rounded-full bg-stone-100 px-3 py-1">你的 AP：{viewerPlayerState?.remainingAp ?? "—"}</span>
-                <span className="rounded-full bg-stone-100 px-3 py-1">目前地格：{currentTile?.nameZh ?? viewerPlayerState?.positionTileId ?? "—"}</span>
-              </div>
-            </div>
-            <GuardianHeartMapStage
-              mapTiles={displayMapTiles}
-              players={data.snapshot.players}
-              viewerSeat={data.viewerSeat}
-              activeSeat={data.snapshot.activeSeat}
-              legalMoveTileIds={legalMoveTileIds}
-              selectedMoveTileId={selectedMoveTileId}
-              selectedTileId={selectedMapTile?.tileId ?? ""}
-              actionDisabledReasonZh={actionDisabledReasonZh}
-              adjacentHelpOptions={adjacentHelpOptions}
-              canUseAdjacentHelp={canUseAdjacentHelpFromMap}
-              canUseMessengerAbility={canUseMessengerAbility}
-              canUseMedicBonusHint={canUseMedicBonusHint}
-              latestActionFeedbackZh={mapActionFeedbackZh}
-              pressureTaskUnlockStatusZh={pressureTaskUnlockStatusZh}
-              roleAbilityHintsZh={roleAbilityHintsZh}
-              onAdjacentHelp={runAdjacentHelpFromMap}
-              onSelectTile={setSelectedMapTileId}
-              onSelectMoveTile={setSelectedMoveTileId}
-              onMoveHere={runMoveFromMap}
-              onUseCurrentTile={runUseCurrentTileFromMap}
-              interactionEnabled={data.viewerRole !== "observer"}
-            />
-          </section>
-
-          <aside className="rounded-[28px] border border-stone-200 bg-white p-3 shadow-sm">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-stone-500">你的手牌</p>
-              <h2 className="mt-1 text-lg font-bold text-stone-950">行動卡與快捷</h2>
-            </div>
-            <div className="mt-4 space-y-3">
-              {(viewerPlayerState?.handCardIds.length ?? 0) > 0 ? (
-                viewerPlayerState?.handCardIds.map((cardId, index) => {
-                  const card = ACTION_CARD_DEFINITION_MAP[cardId];
-                  return (
-                    <HandPreviewCard
-                      key={`hand-${cardId}-${index}`}
-                      title={card?.nameZh ?? cardId}
-                      category={card?.category ?? "support"}
-                      description={card?.rulesTextZh ?? "尚未載入牌面文字"}
-                      note={card?.noteZh ?? ""}
-                      selected={selectedActionCardId === cardId}
-                      onClick={() => toggleSelectedActionCard(cardId)}
-                    />
-                  );
-                })
-              ) : (
-                <div className="rounded-2xl bg-stone-50 px-4 py-6 text-sm text-stone-600">目前沒有手牌。</div>
-              )}
-            </div>
-            <div className="mt-4 rounded-2xl bg-stone-50 p-4 text-sm leading-7 text-stone-700">
-              <p className="font-semibold text-stone-900">目前選擇</p>
-              <p className="mt-1">{currentCardDefinition ? `${currentCardDefinition.nameZh}｜${currentCardDefinition.rulesTextZh}` : "把滑鼠移到手牌上可先看效果，點一下才會進入操作。"}</p>
-              {currentCardDefinition ? (
-                <div className="mt-3 grid gap-2">
-                  <button className="rounded-2xl bg-stone-900 px-4 py-3 text-sm font-medium text-white disabled:opacity-40" disabled={Boolean(selectedCardUseDisabledReasonZh) || submitting || !data.viewerSeat || !selectedActionCardId} onClick={() => runAction(buildPlayActionCardPayload({ actorSeat: data.viewerSeat ?? "P1", cardId: selectedActionCardId, targetSeat: ["card_pull_you_a_bit", "card_same_tile_care", "card_hold_together", "card_respond_together"].includes(selectedActionCardId) ? selectedCardTargetSeat || undefined : undefined, toTileId: ["card_pull_you_a_bit", "card_dash_to_goal"].includes(selectedActionCardId) ? selectedCardTileId || undefined : undefined, resourceType: ["card_same_tile_care", "card_focus_the_point", "card_respond_together"].includes(selectedActionCardId) ? selectedCardResourceType : undefined, teammateResourceType: selectedActionCardId === "card_respond_together" ? selectedCardTeammateResourceType : undefined }))}>使用這張牌</button>
-                  <p className="rounded-2xl border border-stone-200 bg-white px-3 py-2 text-xs leading-6 text-stone-600">若這張牌需要指定隊友、地格或資源，請在下方進階操作區補完目標；目前主畫面先保留最常用的直接使用入口。</p>
-                </div>
-              ) : null}
-            </div>
-            <div className="mt-4 grid gap-2">
-              <button className="rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm font-medium text-stone-700 disabled:opacity-40" disabled={Boolean(actionDisabledReasonZh) || submitting || !data.viewerSeat} onClick={() => runAction({ type: "use_station_or_shelter", actorSeat: data.viewerSeat ?? "P1" })}>使用目前所在地格</button>
-              <button className="rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm font-medium text-stone-700 disabled:opacity-40" disabled={Boolean(actionDisabledReasonZh) || submitting || !data.viewerSeat || !selectedTaskId} onClick={() => runAction({ type: "declare_task", actorSeat: data.viewerSeat ?? "P1", taskId: selectedTaskId })}>宣告目前選擇任務</button>
-              <p className="rounded-2xl bg-stone-900 px-4 py-3 text-sm leading-7 text-stone-50">常用操作現在已前移到主畫面；較複雜的指定流程仍保留在下方進階操作與診斷。</p>
-            </div>
-          </aside>
-        </section>
-      </div>
-
       <details className="mx-auto mt-4 max-w-7xl rounded-[28px] border border-stone-200 bg-white shadow-sm">
         <summary className="cursor-pointer list-none px-5 py-4 text-sm font-semibold text-stone-800">
-          顯示進階操作與診斷
+          進階操作
         </summary>
         <div className="border-t border-stone-200 px-4 py-4">
           <div className="mx-auto grid max-w-7xl gap-4 lg:grid-cols-[1.05fr_0.95fr]">
             <section className="space-y-4">
-              <Panel title="進階診斷" accent="amber">
+              <Panel title="進階資訊" accent="amber">
                 <div className="space-y-3 text-sm leading-7 text-stone-700">
                   <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">目前階段摘要</p>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">階段摘要</p>
                     <p className="mt-1 font-medium text-stone-900">{uiState.phaseSummaryZh}</p>
                     <p className="mt-1 text-stone-600">{uiState.viewerStatusHintZh}</p>
                   </div>
                   <div className="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3">
                     <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">阻塞與同步</p>
-                    <p className="mt-1">{uiState.blockingWindowSummaryZh ?? "目前沒有阻塞視窗，可依主畫面操作。"}</p>
+                    <p className="mt-1">{uiState.blockingWindowSummaryZh ?? "目前沒有阻塞。"}</p>
                     <p className="mt-1 text-stone-500">資料表同步狀態：{persistedLogStatusZh}</p>
                   </div>
                   {data.viewerRole === "host" ? (
                     <div className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sky-900">
                       <p className="text-xs font-semibold uppercase tracking-wide text-sky-700">房主備註</p>
-                      <p className="mt-1">房主專用的大型診斷區正在收斂中；主流程請先以單頁主畫面與獨立紀錄頁為主。</p>
+                      <p className="mt-1">主畫面優先。</p>
                     </div>
                   ) : null}
                 </div>
               </Panel>
 
-              <Panel title="快速驗證入口" accent="sky">
+              <Panel title="模擬入口" accent="sky">
                 <div className="space-y-3 text-sm text-stone-700">
-                  <p>你可以直接去 simulation 頁，先比資源上限、再比牌池版本；房間內調整 profile 後，也能用相同口徑回頭檢查。</p>
+                  <p>到模擬頁比較牌池與上限。</p>
                   <div className="flex flex-wrap gap-2">
                     {suggestedSimulationLinks.map((link) => (
                       <Link key={link.href} href={link.href} className="rounded-xl border border-sky-300 bg-white px-3 py-2 text-xs font-medium text-sky-900">{link.labelZh}</Link>
@@ -4472,35 +4077,35 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
             <section className="space-y-4">
               <Panel title="回合紀錄" accent="rose">
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-sm leading-7 text-stone-600">房間頁先顯示最近 8 筆，避免主畫面一路往下堆；完整紀錄請改看獨立頁。</p>
+                  <p className="text-sm leading-7 text-stone-600">房間頁只顯示最近 8 筆。</p>
                   <div className="flex gap-2">
                     {shouldShowLogToggle ? (
                       <button
                         className="rounded-xl border border-stone-300 px-3 py-2 text-xs font-medium text-stone-700 hover:bg-stone-50"
                         onClick={() => setShowFullLog((current) => !current)}
                       >
-                        {showFullLog ? "收合回最近 8 筆" : `展開全部 ${data.snapshot.actionLog.length} 筆`}
+                        {showFullLog ? "收合回最近 8 筆" : `顯示全部 ${data.snapshot.actionLog.length} 筆`}
                       </button>
                     ) : null}
-                    <Link href={`/rooms/${roomCode}/logs?joinToken=${encodeURIComponent(data.joinToken)}&displayName=${encodeURIComponent(data.displayName)}`} className="rounded-xl bg-stone-900 px-3 py-2 text-xs font-medium text-white hover:bg-stone-800">前往完整紀錄頁</Link>
+                    <Link href={`/rooms/${roomCode}/logs?joinToken=${encodeURIComponent(data.joinToken)}&displayName=${encodeURIComponent(data.displayName)}`} className="rounded-xl bg-stone-900 px-3 py-2 text-xs font-medium text-white hover:bg-stone-800">完整紀錄頁</Link>
                   </div>
                 </div>
                 <div className="mb-3 grid gap-3 md:grid-cols-3">
                   <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
-                    <p className="font-semibold">房間頁顯示範圍</p>
+                    <p className="font-semibold">顯示範圍</p>
                     <p className="mt-1">{showFullLog ? `目前顯示全部 ${data.snapshot.actionLog.length} 筆。` : `目前顯示最近 ${recentActionLogEntries.length} 筆。`}</p>
                   </div>
                   <div className="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-stone-700">
-                    <p className="font-semibold text-stone-900">最新紀錄時間</p>
-                    <p className="mt-1">{data.snapshot.actionLog[0]?.timestamp ?? "目前尚無正式操作紀錄"}</p>
+                    <p className="font-semibold text-stone-900">最新時間</p>
+                    <p className="mt-1">{data.snapshot.actionLog[0]?.timestamp ?? "暫無正式紀錄"}</p>
                   </div>
                   <div className="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-stone-700">
-                    <p className="font-semibold text-stone-900">資料表同步狀態</p>
+                    <p className="font-semibold text-stone-900">同步狀態</p>
                     <p className="mt-1">{persistedLogStatusZh}</p>
                   </div>
                 </div>
                 <div className="space-y-2 text-sm">
-                  {data.snapshot.actionLog.length === 0 ? <p className="text-stone-500">目前尚未有正式操作紀錄。</p> : recentActionLogEntries.map((entry, index) => (
+                  {data.snapshot.actionLog.length === 0 ? <p className="text-stone-500">暫無正式紀錄。</p> : recentActionLogEntries.map((entry, index) => (
                     <details key={`${entry.timestamp}-${entry.actionType}-${entry.actorSeat}`} className="rounded-2xl bg-stone-50 p-3" open={index === 0 && !showFullLog}>
                       <summary className="cursor-pointer list-none">
                         <div className="flex items-start justify-between gap-3">
@@ -4525,18 +4130,19 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
           </div>
         </div>
       </details>
+      </div>
 
       {showSettlement && (data.snapshot.phase === "gameover" || data.snapshot.status === "finished") && (
         <div className="fixed inset-0 z-30 flex items-center justify-center bg-stone-950/60 p-4 backdrop-blur-sm">
           <div className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-[28px] bg-white shadow-2xl">
             <div className="flex flex-wrap items-start justify-between gap-4 border-b border-stone-200 px-6 py-5">
               <div>
-                <p className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${settlementOutcome.tone === "emerald" ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800"}`}>本局結算 v2</p>
+                <p className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${settlementOutcome.tone === "emerald" ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800"}`}>本局結算</p>
                 <h2 className="mt-2 text-3xl font-bold text-stone-950">{settlementTitleZh}</h2>
                 <p className="mt-2 text-base font-medium text-stone-900">{settlementOutcome.verdictZh}</p>
                 <p className="mt-3 text-sm leading-7 text-stone-600">{settlementReasonZh}</p>
               </div>
-              <button className="rounded-xl border border-stone-300 px-3 py-2 text-sm font-medium text-stone-700 hover:bg-stone-50" onClick={() => setShowSettlement(false)}>返回房間頁</button>
+              <button className="rounded-xl border border-stone-300 px-3 py-2 text-sm font-medium text-stone-700 hover:bg-stone-50" onClick={() => setShowSettlement(false)}>回房間</button>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
               <div className="grid gap-3 md:grid-cols-5">
@@ -4549,12 +4155,10 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
               <div className="mt-6 grid gap-3 lg:grid-cols-[1.05fr_0.95fr]">
                 <div className="space-y-3">
                   <div className={`rounded-2xl border p-4 ${settlementOutcome.tone === "emerald" ? "border-emerald-200 bg-emerald-50" : "border-rose-200 bg-rose-50"}`}>
-                    <p className="text-[13px] font-semibold leading-5 text-stone-950">本局診斷</p>
+                    <p className="text-[13px] font-semibold leading-5 text-stone-950">摘要</p>
                     <ul className="mt-3 space-y-2 text-sm leading-7 text-stone-800">
                       {settlementOutcome.srZeroSeats.length > 0 ? <li>SR 歸零席位：{settlementOutcome.srZeroSeats.join("、")}</li> : null}
                       {settlementOutcome.spZeroSeats.length > 0 ? <li>SP 歸零席位：{settlementOutcome.spZeroSeats.join("、")}</li> : null}
-                      <li>目前房間設定：{data.snapshot.roomConfig.resourceCapMode === "uncapped" ? "無上限" : "有上限"}｜行動牌池 {ACTION_DECK_PROFILE_MAP[data.snapshot.roomConfig.actionDeckProfileId]?.nameZh ?? data.snapshot.roomConfig.actionDeckProfileId}</li>
-                      <li>事件／任務池：{EVENT_POOL_PROFILE_MAP[data.snapshot.roomConfig.eventPoolProfileId]?.nameZh ?? data.snapshot.roomConfig.eventPoolProfileId}／{TASK_POOL_PROFILE_MAP[data.snapshot.roomConfig.taskPoolProfileId]?.nameZh ?? data.snapshot.roomConfig.taskPoolProfileId}</li>
                       {settlementOutcome.weakestPlayer ? <li>收尾時最脆弱席位：{settlementOutcome.weakestPlayer.seatId}（SR {settlementOutcome.weakestPlayer.currentSr} / SP {settlementOutcome.weakestPlayer.currentSp}）</li> : null}
                     </ul>
                   </div>
@@ -4576,27 +4180,27 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
                 </div>
                 <div className="space-y-3">
                   <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
-                    <p className="text-sm font-semibold text-amber-950">未完成任務與場上狀態</p>
+                    <p className="text-sm font-semibold text-amber-950">未完成任務</p>
                     <div className="mt-3 space-y-2 text-sm text-amber-950">
                       {settlementOutcome.unresolvedTasks.length > 0 ? settlementOutcome.unresolvedTasks.map((task) => (
                         <div key={`unresolved-${task.taskId}`} className="rounded-xl bg-white px-3 py-2">
                           <p className="font-semibold">{task.nameZh}</p>
                           <p className="mt-1 text-xs text-stone-600">{task.completionHintZh}</p>
                         </div>
-                      )) : <p className="rounded-xl bg-white px-3 py-2">目前可見任務都已完成。</p>}
+                      )) : <p className="rounded-xl bg-white px-3 py-2">可見任務已完成。</p>}
                     </div>
                   </div>
                   <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4">
-                    <p className="text-sm font-semibold text-sky-950">下一步建議</p>
+                    <p className="text-sm font-semibold text-sky-950">後續</p>
                     <ul className="mt-3 space-y-2 text-sm leading-7 text-sky-950">
                       {settlementOutcome.nextStepsZh.map((step) => <li key={step}>• {step}</li>)}
                     </ul>
                     <div className="mt-4 flex flex-wrap gap-2">
-                      <Link href={`/rooms/${roomCode}/logs?joinToken=${encodeURIComponent(data.joinToken)}&displayName=${encodeURIComponent(data.displayName)}`} className="rounded-xl bg-stone-900 px-3 py-2 text-sm font-medium text-white hover:bg-stone-800">查看完整回合紀錄</Link>
+                      <Link href={`/rooms/${roomCode}/logs?joinToken=${encodeURIComponent(data.joinToken)}&displayName=${encodeURIComponent(data.displayName)}`} className="rounded-xl bg-stone-900 px-3 py-2 text-sm font-medium text-white hover:bg-stone-800">完整紀錄</Link>
                       {suggestedSimulationLinks.map((link) => (
                         <Link key={`settlement-${link.href}`} href={link.href} className="rounded-xl border border-sky-300 bg-white px-3 py-2 text-sm font-medium text-sky-900">{link.labelZh}</Link>
                       ))}
-                      <button className="rounded-xl border border-stone-300 px-3 py-2 text-sm font-medium text-stone-700 hover:bg-stone-50" onClick={() => void bootstrap()}>重新整理房間</button>
+                      <button className="rounded-xl border border-stone-300 px-3 py-2 text-sm font-medium text-stone-700 hover:bg-stone-50" onClick={() => void bootstrap()}>重新整理</button>
                       <button className="rounded-xl border border-stone-300 px-3 py-2 text-sm font-medium text-stone-700 hover:bg-stone-50" onClick={() => router.push('/')}>返回首頁</button>
                     </div>
                   </div>
@@ -4607,17 +4211,6 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
         </div>
       )}
     </main>
-  );
-}
-
-
-function SurfaceMetric({ label, value, hint }: { label: string; value: string; hint: string }) {
-  return (
-    <div className="rounded-2xl bg-stone-50 p-4">
-      <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">{label}</p>
-      <p className="mt-2 text-lg font-semibold text-stone-950">{value}</p>
-      <p className="mt-2 text-sm leading-6 text-stone-600">{hint}</p>
-    </div>
   );
 }
 
@@ -4966,7 +4559,6 @@ function HandPreviewCard({
   );
 }
 
-
 function MobileBottomDrawer({
   open,
   title,
@@ -5023,15 +4615,6 @@ function Panel({ title, children, accent = "stone" }: { title: string; children:
   );
 }
 
-function ActionBox({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="rounded-2xl bg-stone-50 p-3">
-      <p className="mb-2 text-sm font-semibold">{title}</p>
-      {children}
-    </div>
-  );
-}
-
 function phaseLabel(phase: GameSnapshot["phase"]) {
   switch (phase) {
     case "lobby":
@@ -5046,24 +4629,6 @@ function phaseLabel(phase: GameSnapshot["phase"]) {
       return "遊戲結束";
     default:
       return phase;
-  }
-}
-
-
-function tileKindLabel(kind: string) {
-  switch (kind) {
-    case "center":
-      return "中央大道";
-    case "safe":
-      return "一般地格";
-    case "risk":
-      return "風險地格";
-    case "station":
-      return "物資站";
-    case "shelter":
-      return "庇護所";
-    default:
-      return kind;
   }
 }
 

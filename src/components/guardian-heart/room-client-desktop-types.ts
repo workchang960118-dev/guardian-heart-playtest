@@ -14,22 +14,13 @@ export type CardChannelSection = {
   tone?: BadgeTone;
 };
 
-export type CardReservedSlot = {
-  key: string;
-  labelZh: string;
-  statusZh: string;
-};
-
 export type TaskRailItem = {
   taskId: string;
   title: string;
-  subtitle: string;
-  reward: string;
   isDone: boolean;
   isSelected: boolean;
-  hint?: string;
-  summaryZh?: string;
   badgeZh: string;
+  railStatusZh?: string;
   tone: BadgeTone;
   canDeclare: boolean;
 };
@@ -58,6 +49,7 @@ export type RosterItem = {
 };
 
 export type HandItem = {
+  instanceKey: string;
   cardId: string;
   title: string;
   category: string;
@@ -107,7 +99,6 @@ export type SelectedCardPanel = {
   }>;
   metaPills?: CardMetaPill[];
   channelSections?: CardChannelSection[];
-  reservedSlots?: CardReservedSlot[];
 };
 
 export type SelectedTaskPanel = {
@@ -123,15 +114,6 @@ export type SelectedTaskPanel = {
   progressLinesZh: string[];
   canDeclare: boolean;
   declareDisabledReasonZh?: string;
-  overviewCounts: {
-    completed: number;
-    ready: number;
-    waitCampfire: number;
-    blocked: number;
-  };
-  metaPills?: CardMetaPill[];
-  channelSections?: CardChannelSection[];
-  reservedSlots?: CardReservedSlot[];
 };
 
 export type RoleAbilityPanel = {

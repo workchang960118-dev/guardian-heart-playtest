@@ -491,14 +491,14 @@ export function SimulationReportClient() {
       <div className="mx-auto max-w-7xl space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <p className="mb-2 text-sm font-semibold text-amber-700">守護之心模擬比較中心</p>
+            <p className="mb-2 text-sm font-semibold text-amber-700">守護之心模擬</p>
             <h1 className="text-3xl font-bold">守護之心｜AI 模擬比較報表</h1>
             <p className="mt-3 max-w-3xl text-sm leading-7 text-stone-600">
-              這頁會自動讀取模擬比較資料，先用預設比較組觀察版本差異，再判斷是否真的要動規則或牌池。
+              先看版本差異，再判斷要不要動規則或牌池。
             </p>
           </div>
           <div className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm leading-7 text-sky-900 max-w-3xl">
-            這頁是給你看「不同版本在 AI 模擬下會差多少」。若你只想知道哪個版本比較穩、哪個版本比較接近首玩目標，先看「首玩體驗基準對照」和「版本總表」。
+            想快速看哪版更穩、哪版更接近首玩目標，先看「首玩體驗基準對照」和「版本總表」。
           </div>
           <div className="flex gap-3">
             <Link href="/" className="rounded-2xl border border-stone-300 bg-white px-4 py-2 text-sm font-semibold">
@@ -524,7 +524,7 @@ export function SimulationReportClient() {
         </div>
 
         <section className="rounded-3xl border border-amber-200 bg-amber-50 p-5 shadow-sm">
-          <h2 className="text-lg font-semibold text-amber-900">本輪模擬口徑提醒</h2>
+          <h2 className="text-lg font-semibold text-amber-900">模擬口徑</h2>
           <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-7 text-amber-900">
             {(report?.reportFormatZh ?? []).map((line, index) => (
               <li key={`evidence-${index}`}>{line}</li>
@@ -566,14 +566,14 @@ export function SimulationReportClient() {
               </label>
             </div>
             <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm leading-7 text-amber-900">
-              <p className="font-semibold">目前選中的比較方案</p>
+              <p className="font-semibold">目前比較組</p>
               <p className="mt-2">{activePreset?.descriptionZh ?? "正在載入比較組說明..."}</p>
-              <p className="mt-2 text-xs text-amber-800">切換選單後，按「重新跑比較」才會送出新的一輪模擬。若你只是在讀表，不需要每次都重跑。</p>
+              <p className="mt-2 text-xs text-amber-800">切換選單後再按「重新跑比較」即可。</p>
             </div>
           </div>
 
           <div className="rounded-2xl border border-stone-200 bg-stone-50 p-4 text-sm leading-7 text-stone-700">
-            <p className="font-semibold">這頁怎麼看</p>
+            <p className="font-semibold">怎麼看</p>
             <ul className="mt-2 list-disc pl-5">
               {(report?.reportFormatZh ?? []).map((line, index) => (
                 <li key={`evidence-${index}`}>{line}</li>
@@ -590,7 +590,7 @@ export function SimulationReportClient() {
             <div className="max-w-3xl">
               <h2 className="text-xl font-semibold text-emerald-950">白話自定義 AI</h2>
               <p className="mt-2 text-sm leading-7 text-emerald-950">
-                這塊不是開發 preset。你可以直接幫 AI 取名字，再排出它的思考順序，例如先顧自己、再顧隊友、最後補事件，然後直接看它的勝率。
+                你可以直接幫 AI 取名字、排思考順序，然後看它的勝率。
               </p>
             </div>
             <div className="rounded-2xl border border-emerald-200 bg-white px-4 py-3 text-sm leading-7 text-stone-700">
@@ -706,7 +706,7 @@ export function SimulationReportClient() {
                 <li>每做完一個動作，下一輪會再從第一優先重新檢查</li>
               </ul>
               <p className="mt-4 text-xs leading-6 text-stone-500">
-                這版先做成好懂的 MVP：你排的是思考順序，不是每張牌的細節腳本。
+                這版先做成好懂的 MVP：你排的是思考順序，不是逐牌腳本。
               </p>
             </div>
           </div>
@@ -755,7 +755,7 @@ export function SimulationReportClient() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="text-lg font-semibold text-violet-950">AI 模擬分支檢驗</h2>
-              <p className="mt-1 text-sm leading-7 text-violet-900">這塊不是單一 preset 比較，而是把幾條重要分支一起掃過，快速回答目前哪條主線健康、哪條還偏離。</p>
+              <p className="mt-1 text-sm leading-7 text-violet-900">這裡會一起掃幾條重要分支，快速看哪條主線健康、哪條還偏離。</p>
             </div>
             <span className="rounded-full bg-white px-3 py-1 text-xs text-violet-700">
               {branchReport ? `${branchReport.runCount} 局 / 分支` : `最多 ${Math.min(runCount, 100)} 局 / 分支`}
@@ -799,7 +799,7 @@ export function SimulationReportClient() {
                   {!branchReport?.rows?.length ? (
                     <tr>
                       <td colSpan={7} className="px-3 py-6 text-center text-sm text-stone-500">
-                        {branchLoading ? "分支檢驗計算中..." : "尚未取得分支檢驗結果。"}
+                    {branchLoading ? "分支檢驗計算中..." : "尚未取得分支結果。"}
                       </td>
                     </tr>
                   ) : null}
@@ -829,16 +829,16 @@ export function SimulationReportClient() {
 
         <section className="grid gap-4 rounded-3xl border border-sky-200 bg-sky-50 p-5 shadow-sm lg:grid-cols-[1.2fr_0.8fr]">
           <div>
-            <h2 className="text-lg font-semibold text-sky-950">先看這裡｜不用先讀懂整頁細節</h2>
+            <h2 className="text-lg font-semibold text-sky-950">先看這裡</h2>
             <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-7 text-sky-950">
               <li>先看「正式候選」：這是目前最推薦你優先採用的版本。</li>
               <li>再看「首玩體驗基準對照」：確認勝率、早崩、後移敗局與惜敗感是否接近目標。</li>
               <li>若你只想知道為什麼要選它，看「差距主因」與「重點摘要」。</li>
-              <li>其餘表格多半是進階細節；看不懂也不會妨礙你先做設計判讀。</li>
+              <li>其餘表格多半是進階細節。</li>
             </ul>
           </div>
           <div className="rounded-2xl border border-sky-200 bg-white p-4 text-sm leading-7 text-stone-700">
-            <p className="font-semibold text-stone-900">你在這頁最需要的只有四個答案</p>
+            <p className="font-semibold text-stone-900">先回答四個問題</p>
             <ol className="mt-2 list-decimal space-y-1.5 pl-5">
               <li>哪個版本目前最好？</li>
               <li>它的勝率是多少？</li>
@@ -859,7 +859,7 @@ export function SimulationReportClient() {
         <section className="grid gap-4 rounded-3xl bg-white p-6 shadow-sm lg:grid-cols-[1.2fr_1fr]">
           <div>
             <h2 className="mb-4 text-xl font-semibold">首玩體驗基準對照</h2>
-            <p className="mb-4 text-sm leading-7 text-stone-600">這裡是 v5 的主評分區。Python 基準仍保留，但現在先看首玩體驗是否貼近你拍板的目標：40%–45% 勝率、少早崩、敗局後移、R6–R7 惜敗替代指標提高，以及勝局常出現資源緊張時刻。</p>
+            <p className="mb-4 text-sm leading-7 text-stone-600">先看是否貼近你拍板的首玩目標：40%–45% 勝率、少早崩、敗局後移，以及勝局常出現資源緊張時刻。</p>
             {report?.playtestAlignment ? (
               <div className="space-y-3">
                 <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm leading-7 text-emerald-950">
@@ -886,13 +886,13 @@ export function SimulationReportClient() {
                 ))}
               </div>
             ) : (
-              <p className="text-sm text-stone-500">尚未產生首玩體驗對照。</p>
+              <p className="text-sm text-stone-500">尚未產生首玩對照。</p>
             )}
           </div>
 
           <div>
             <h2 className="mb-4 text-xl font-semibold">首玩適配排名</h2>
-            <p className="mb-3 text-sm leading-7 text-stone-600">這張表是給你快速看哪個版本最貼近你設定的首玩體驗。適配分數越低，代表越接近理想節奏。</p>
+            <p className="mb-3 text-sm leading-7 text-stone-600">適配分數越低，代表越接近理想節奏。</p>
             <div className="overflow-x-auto rounded-2xl border border-stone-200">
               <table className="min-w-full text-sm">
                 <thead>
@@ -921,7 +921,7 @@ export function SimulationReportClient() {
                 </tbody>
               </table>
             </div>
-            <p className="mt-3 text-xs leading-6 text-stone-500">R5–R7 與 R6–R7 目前是用失敗回合當 proxy；它能先幫你判讀節奏是否後移，但還不是完整的「差一點」判定。</p>
+            <p className="mt-3 text-xs leading-6 text-stone-500">R5–R7 與 R6–R7 目前先用失敗回合代判節奏是否後移。</p>
           </div>
         </section>
 
@@ -952,7 +952,7 @@ export function SimulationReportClient() {
                 </div>
               </div>
             ) : (
-              <p className="text-sm text-stone-500">尚未產生 差距主因診斷。</p>
+              <p className="text-sm text-stone-500">尚未產生差距主因診斷。</p>
             )}
           </div>
           <div className="rounded-3xl bg-white p-6 shadow-sm">
@@ -1029,13 +1029,13 @@ export function SimulationReportClient() {
                 </ul>
               </div>
             ) : (
-              <p className="text-sm text-stone-500">尚未取得外部基準資料。</p>
+              <p className="text-sm text-stone-500">尚未取得外部基準。</p>
             )}
           </div>
 
           <div className="rounded-3xl bg-white p-6 shadow-sm">
             <h2 className="mb-4 text-xl font-semibold">正式候選 vs 外部基準參照</h2>
-            <p className="mb-4 text-sm leading-7 text-stone-600">這裡優先拿目前報表的正式候選版本，對照你上傳的 Python 主線預設結果。這輪已補成差距分解，不只看三個欄位，還會一起看平均解決事件數與 SR / SP 敗局率。</p>
+            <p className="mb-4 text-sm leading-7 text-stone-600">這裡會拿目前正式候選，對照你上傳的 Python 主線預設結果。</p>
             {report?.benchmarkAlignment ? (
               <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm leading-7 text-amber-950">
                 <p className="font-semibold">最接近的 Python 參照版本：{report.benchmarkAlignment.closestPythonLabelZh}</p>
@@ -1066,7 +1066,7 @@ export function SimulationReportClient() {
 
         <section className="rounded-3xl bg-white p-6 shadow-sm">
           <h2 className="mb-4 text-xl font-semibold">版本總表</h2>
-          <p className="mb-4 text-sm leading-7 text-stone-600">這張主表把每個版本的核心指標攤平給你看。若你只想快速比較版本差異，先看這裡即可。</p>
+          <p className="mb-4 text-sm leading-7 text-stone-600">想快速比較版本差異，先看這裡即可。</p>
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
               <thead>

@@ -1,4 +1,4 @@
-import type { BadgeTone, CardChannelSection, CardMetaPill, CardReservedSlot } from "@/components/guardian-heart/room-client-desktop-types";
+import type { BadgeTone, CardChannelSection, CardMetaPill } from "@/components/guardian-heart/room-client-desktop-types";
 
 function toneClasses(tone: BadgeTone = "stone") {
   if (tone === "rose") return "border-rose-200 bg-rose-50 text-rose-700";
@@ -6,7 +6,7 @@ function toneClasses(tone: BadgeTone = "stone") {
   if (tone === "sky") return "border-sky-200 bg-sky-50 text-sky-700";
   if (tone === "amber") return "border-amber-200 bg-amber-50 text-amber-700";
   if (tone === "violet") return "border-violet-200 bg-violet-50 text-violet-700";
-  return "border-stone-200 bg-stone-50 text-stone-700";
+  return "border-[#D9DEC0] bg-[#FAFBF6] text-stone-700";
 }
 
 export function DesktopCardMetaStrip({ items, className = "" }: { items: CardMetaPill[]; className?: string }) {
@@ -46,23 +46,6 @@ export function DesktopCardChannelSections({
           <p className="mt-1 text-[10px] leading-5 text-stone-700">{item.bodyZh}</p>
         </div>
       ))}
-    </div>
-  );
-}
-
-export function DesktopCardReservedStrip({ items }: { items: CardReservedSlot[] }) {
-  if (items.length === 0) return null;
-
-  return (
-    <div className="rounded-[12px] border border-dashed border-stone-200 bg-stone-50/80 px-2.5 py-2">
-      <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-stone-500">正式版預留</p>
-      <div className="mt-1 flex flex-wrap gap-1.5">
-        {items.map((item) => (
-          <span key={item.key} className="rounded-full bg-white px-2 py-0.5 text-[9px] text-stone-600">
-            {item.labelZh}：{item.statusZh}
-          </span>
-        ))}
-      </div>
     </div>
   );
 }

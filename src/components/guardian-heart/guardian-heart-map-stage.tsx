@@ -69,15 +69,15 @@ function fullKindLabel(kind: MapTile["kind"]) {
 function kindEffectSummary(tile: MapTile) {
   switch (tile.kind) {
     case "center":
-      return "全員固定起點，也是最穩定的 regroup 節點。";
+      return "全員固定起點，適合重新集結。";
     case "safe":
-      return "一般地格，不會額外給資源，但適合會合、換位與互助。";
+      return "一般地格，適合會合與互助。";
     case "risk":
-      return "若營火時仍停留在此，會承受風險地格損失；適合短衝，不適合久留。";
+      return "營火時若仍停留，會承受風險損失。";
     case "station":
-      return "物資站：花 1AP 使用，可回復 1SR。通常值得繞路來補生存資源。";
+      return "物資站：花 1AP，可回 1SR。";
     case "shelter":
-      return "庇護所：花 1AP 使用，可回復 1SP。適合壓力累積後回穩心理資源。";
+      return "庇護所：花 1AP，可回 1SP。";
     default:
       return "";
   }
@@ -167,7 +167,7 @@ export function GuardianHeartMapStage(props: {
     hideMetaBar = false,
   } = props;
   const [hoveredTileId, setHoveredTileId] = useState("");
-  const [selectedFollowMoveBySeat, setSelectedFollowMoveBySeat] = useState<Record<string, string>>({});
+  const [selectedHelpMenuSeatId, setSelectedHelpMenuSeatId] = useState<SeatId | "">("");
 
   const viewerPlayer = viewerSeat
     ? players.find((player) => player.seatId === viewerSeat) ?? null
@@ -196,6 +196,22 @@ export function GuardianHeartMapStage(props: {
   const tileMenuRightPercent = focusTileLayout && tileMenuAnchorRight ? Math.min(Math.max(100 - focusTileLayout.x + 8, 8), 72) : null;
   const tileMenuTopPercent = focusTileLayout ? Math.min(Math.max(focusTileLayout.y - 4, 8), 74) : null;
   const adjacentHelpTargetSeatIds = new Set(adjacentHelpOptions.map((option) => option.seatId));
+  const selectedHelpMenuTarget = selectedHelpMenuSeatId
+    ? adjacentHelpOptions.find((option) => option.seatId === selectedHelpMenuSeatId) ?? null
+    : null;
+  const selectedHelpMenuTileLayout = selectedHelpMenuTarget?.positionTileId
+    ? MAP_LAYOUT_19[selectedHelpMenuTarget.positionTileId] ?? null
+    : null;
+  const helpMenuAnchorRight = Boolean(selectedHelpMenuTileLayout && selectedHelpMenuTileLayout.x >= 60);
+  const helpMenuLeftPercent = selectedHelpMenuTileLayout && !helpMenuAnchorRight
+    ? Math.min(Math.max(selectedHelpMenuTileLayout.x + 8, 8), 74)
+    : null;
+  const helpMenuRightPercent = selectedHelpMenuTileLayout && helpMenuAnchorRight
+    ? Math.min(Math.max(100 - selectedHelpMenuTileLayout.x + 8, 8), 74)
+    : null;
+  const helpMenuTopPercent = selectedHelpMenuTileLayout
+    ? Math.min(Math.max(selectedHelpMenuTileLayout.y + 4, 10), 78)
+    : null;
   const focusTileAdjacentHelpTargets = focusTile
     ? adjacentHelpOptions.filter((option) => option.positionTileId === focusTile.tileId)
     : [];
@@ -216,8 +232,8 @@ export function GuardianHeartMapStage(props: {
     : focusTile.tileId === viewerPlayer.positionTileId
       ? "這是你目前所在位置。"
       : legalMoveTileIds.has(focusTile.tileId)
-        ? "此格與你目前位置相鄰，可直接移動。"
-        : "此格不是你本回合可一步移動到的相鄰格，需先換位或留待之後回合。";
+        ? "此格相鄰，可直接移動。"
+        : "此格不在本回合的一步移動範圍。";
 
   return (
     <div className={hideMetaBar ? "space-y-0" : "space-y-2"}>
@@ -227,7 +243,6 @@ export function GuardianHeartMapStage(props: {
           <span className="rounded-full border border-stone-200 bg-white px-2.5 py-1">輪到：{activeSeat ?? "—"}</span>
           <span className="rounded-full border border-stone-200 bg-white px-2.5 py-1">可移動 {legalMoveTileIds.size} 格</span>
         </div>
-        <span className="rounded-full border border-stone-200 bg-white px-2.5 py-1">地圖版型 v1</span>
       </div> : null}
 
       <div className={hideMetaBar ? "rounded-[26px] border border-stone-200 bg-stone-50 p-1" : "rounded-[28px] border border-stone-200 bg-stone-50 p-2"}>
@@ -268,9 +283,8 @@ export function GuardianHeartMapStage(props: {
             const isCurrentActorHere = activePlayerTileId === tile.tileId;
 
             return (
-              <button
+              <div
                 key={tile.tileId}
-                type="button"
                 className={[
                   "absolute flex h-[108px] w-[128px] -translate-x-1/2 -translate-y-1/2 flex-col justify-between rounded-[24px] border p-2.5 text-left shadow-sm transition lg:h-[122px] lg:w-[142px]",
                   kindPalette(tile.kind),
@@ -286,6 +300,7 @@ export function GuardianHeartMapStage(props: {
                 onClick={() => {
                   const nextTileId = isSelectedTile ? "" : tile.tileId;
                   onSelectTile(nextTileId);
+                  setSelectedHelpMenuSeatId("");
                   if (interactionEnabled && isLegalMove && onSelectMoveTile) {
                     onSelectMoveTile(nextTileId ? tile.tileId : "");
                   }
@@ -294,7 +309,20 @@ export function GuardianHeartMapStage(props: {
                   if (canUseDirectMapActions && isLegalMove && onMoveHere) {
                     onMoveHere(tile.tileId);
                     onSelectTile("");
+                    setSelectedHelpMenuSeatId("");
                     if (onSelectMoveTile) onSelectMoveTile("");
+                  }
+                }}
+                role="button"
+                tabIndex={interactionEnabled ? 0 : -1}
+                onKeyDown={(event) => {
+                  if (event.key !== "Enter" && event.key !== " ") return;
+                  event.preventDefault();
+                  const nextTileId = isSelectedTile ? "" : tile.tileId;
+                  onSelectTile(nextTileId);
+                  setSelectedHelpMenuSeatId("");
+                  if (interactionEnabled && isLegalMove && onSelectMoveTile) {
+                    onSelectMoveTile(nextTileId ? tile.tileId : "");
                   }
                 }}
               >
@@ -318,17 +346,40 @@ export function GuardianHeartMapStage(props: {
                     {occupants.length > 0 ? occupants.map((player) => {
                       const isViewer = player.seatId === viewerSeat;
                       const isActive = player.seatId === activeSeat;
+                      const isAdjacentHelpTarget = adjacentHelpTargetSeatIds.has(player.seatId);
+                      const isSelectedHelpTarget = selectedHelpMenuSeatId === player.seatId;
+                      const tokenClasses = [
+                        "inline-flex min-w-[36px] items-center justify-center whitespace-nowrap rounded-full px-3 py-1.5 text-[11px] font-semibold shadow-sm transition",
+                        isViewer ? "bg-stone-900 text-white ring-2 ring-amber-300 shadow-md" : "border border-stone-300 bg-white text-stone-900",
+                        !isViewer && isActive ? "animate-pulse bg-amber-100 text-amber-900 ring-2 ring-amber-300 shadow-md" : "",
+                      ].join(" ");
+                      const helpTokenClasses = [
+                        tokenClasses,
+                        "cursor-pointer border-emerald-300 bg-emerald-50 text-emerald-900 hover:bg-emerald-100",
+                        isSelectedHelpTarget ? "ring-2 ring-emerald-400 shadow-md" : "",
+                      ].join(" ");
                       return (
-                        <span
+                        isAdjacentHelpTarget && canUseAdjacentHelp && onAdjacentHelp ? (
+                          <button
+                            key={`${tile.tileId}-${player.seatId}`}
+                            type="button"
+                            className={helpTokenClasses}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setSelectedHelpMenuSeatId((current) => (current === player.seatId ? "" : player.seatId));
+                            }}
+                            title={`點擊對 ${player.seatId} 開啟相鄰互助`}
+                          >
+                            {player.seatId}
+                          </button>
+                        ) : (
+                          <span
                           key={`${tile.tileId}-${player.seatId}`}
-                          className={[
-                            "inline-flex min-w-[36px] items-center justify-center whitespace-nowrap rounded-full px-3 py-1.5 text-[11px] font-semibold shadow-sm",
-                            isViewer ? "bg-stone-900 text-white ring-2 ring-amber-300 shadow-md" : "border border-stone-300 bg-white text-stone-900",
-                            !isViewer && isActive ? "animate-pulse bg-amber-100 text-amber-900 ring-2 ring-amber-300 shadow-md" : "",
-                          ].join(" ")}
+                          className={tokenClasses}
                         >
                           {player.seatId}
                         </span>
+                        )
                       );
                     }) : <span className="whitespace-nowrap rounded-full bg-white/70 px-2.5 py-1 text-[10px] text-stone-500">無玩家</span>}
                   </div>
@@ -336,10 +387,10 @@ export function GuardianHeartMapStage(props: {
                     {isViewerHere ? "你在這裡" : isCurrentActorHere ? "目前行動者在這裡" : isLegalMove ? "可點選作為移動目標" : ""}
                   </p>
                   {occupants.some((player) => adjacentHelpTargetSeatIds.has(player.seatId)) ? (
-                    <p className="whitespace-nowrap text-[10.5px] font-medium text-emerald-700">此格有可相鄰互助對象</p>
+                    <p className="whitespace-nowrap text-[10.5px] font-medium text-emerald-700">此格有可相鄰互助對象，點隊友即可操作</p>
                   ) : null}
                 </div>
-              </button>
+              </div>
             );
           })}
               {hoveredTile && hoveredTileLayout && hoveredTile.tileId !== focusTile?.tileId ? (
@@ -352,10 +403,9 @@ export function GuardianHeartMapStage(props: {
                       <p className="text-[12px] font-bold text-stone-950">{hoveredTile.nameZh}</p>
                       <p className="mt-0.5 text-[10px] text-stone-500">{fullKindLabel(hoveredTile.kind)}</p>
                     </div>
-                    <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[10px] text-stone-600">滑過看資訊</span>
                   </div>
                   <p className="mt-2 text-[11px] leading-5 text-stone-600">{kindEffectSummary(hoveredTile)}</p>
-                  <div className="mt-2 text-[10px] text-stone-500">{legalMoveTileIds.has(hoveredTile.tileId) ? "點一下可打開操作選單，雙擊可快速移動。" : "點一下可查看互動選單；若不是相鄰格，現在只能先查看資訊。"}</div>
+                  <div className="mt-2 text-[10px] text-stone-500">{legalMoveTileIds.has(hoveredTile.tileId) ? "點一下操作；雙擊移動。" : "點一下看資訊。"}</div>
                 </div>
               ) : null}
               {focusTile && focusTileLayout ? (
@@ -406,13 +456,72 @@ export function GuardianHeartMapStage(props: {
                   </div>
                 </div>
               ) : null}
+              {selectedHelpMenuTarget && selectedHelpMenuTileLayout ? (
+                <div
+                  className="absolute z-30 w-[240px] rounded-3xl border border-emerald-200 bg-white/96 p-3 shadow-2xl backdrop-blur"
+                  style={{
+                    left: helpMenuAnchorRight ? undefined : `${helpMenuLeftPercent}%`,
+                    right: helpMenuAnchorRight ? `${helpMenuRightPercent}%` : undefined,
+                    top: `${helpMenuTopPercent}%`,
+                  }}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="text-[12px] font-bold text-stone-950">
+                        對 {selectedHelpMenuTarget.seatId} 相鄰互助
+                      </p>
+                      <p className="mt-0.5 text-[10px] text-stone-500">
+                        {selectedHelpMenuTarget.displayName}
+                        {selectedHelpMenuTarget.isAi ? "（AI）" : ""}｜SR {selectedHelpMenuTarget.currentSr}／SP {selectedHelpMenuTarget.currentSp}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      className="rounded-full border border-stone-200 bg-stone-50 px-2 py-0.5 text-[10px] text-stone-600"
+                      onClick={() => setSelectedHelpMenuSeatId("")}
+                    >
+                      關閉
+                    </button>
+                  </div>
+                  <p className="mt-2 text-[11px] leading-5 text-stone-600">
+                    這是 0AP 相鄰互助；若技能可用，送出後會再詢問。
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      className="rounded-full bg-emerald-600 px-3 py-1.5 text-[11px] font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
+                      disabled={!canUseDirectMapActions || !canUseAdjacentHelp || !onAdjacentHelp}
+                      onClick={() => {
+                        onAdjacentHelp?.(selectedHelpMenuTarget.seatId, "SP");
+                        setSelectedHelpMenuSeatId("");
+                      }}
+                    >
+                      轉移 SP
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-full bg-amber-700 px-3 py-1.5 text-[11px] font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
+                      disabled={!canUseDirectMapActions || !canUseAdjacentHelp || !onAdjacentHelp}
+                      onClick={() => {
+                        onAdjacentHelp?.(selectedHelpMenuTarget.seatId, "SR");
+                        setSelectedHelpMenuSeatId("");
+                      }}
+                    >
+                      轉移 SR
+                    </button>
+                  </div>
+                  {actionDisabledReasonZh ? (
+                    <p className="mt-2 text-[10px] text-stone-500">目前不能操作：{actionDisabledReasonZh}</p>
+                  ) : null}
+                </div>
+              ) : null}
             </>
           ) : (
             <div className="flex h-full items-center justify-center px-8 text-center">
               <div className="max-w-xl rounded-[24px] border border-dashed border-stone-300 bg-white/80 px-6 py-8 text-sm leading-7 text-stone-700 shadow-sm">
                 <p className="text-base font-semibold text-stone-900">地圖尚未正常載入</p>
-                <p className="mt-2">目前有 {mapTiles.length} 個地格資料，但沒有對應到可顯示的位置。這通常是版面迭代時的顯示回歸，不是房間裡真的沒有地圖。</p>
-                <p className="mt-2">請先檢查地圖 seed 與版面座標是否一致；在修正前，下方仍會保留地格細節與快速操作區。</p>
+                <p className="mt-2">目前有 {mapTiles.length} 個地格資料，但沒有對應座標。</p>
+                <p className="mt-2">請先確認地圖 seed 與座標。</p>
               </div>
             </div>
           )}
@@ -422,10 +531,10 @@ export function GuardianHeartMapStage(props: {
       <div className="rounded-[18px] border border-stone-200 bg-white px-3 py-2 text-[11px] text-stone-700">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded-full bg-stone-100 px-2.5 py-1 font-medium">地圖操作：點地格開啟操作</span>
-            <span className="rounded-full bg-stone-100 px-2.5 py-1">雙擊合法目標可快速移動</span>
+            <span className="rounded-full bg-stone-100 px-2.5 py-1 font-medium">點地格開操作</span>
+            <span className="rounded-full bg-stone-100 px-2.5 py-1">雙擊移動</span>
           </div>
-          <span className="rounded-full border border-stone-200 bg-stone-50 px-2.5 py-1 text-[10px] text-stone-600">{focusTile ? `焦點：${focusTile.nameZh}` : '請先點選地格'}</span>
+          <span className="rounded-full border border-stone-200 bg-stone-50 px-2.5 py-1 text-[10px] text-stone-600">{focusTile ? `焦點：${focusTile.nameZh}` : '先選地格'}</span>
         </div>
         <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[10px] text-stone-500">
           <span>{focusTile ? kindEffectSummary(focusTile) : '常用操作已整合到地格旁小視窗。'}</span>
@@ -435,12 +544,12 @@ export function GuardianHeartMapStage(props: {
 
       <details className="rounded-2xl border border-stone-200 bg-white/80">
 
-        <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-stone-800">展開地圖細節與快捷操作</summary>
+        <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-stone-800">地圖細節</summary>
         <div className="border-t border-stone-200 p-3">
       <div className="grid gap-3 lg:grid-cols-[1.08fr_0.92fr]">
         <div className="rounded-2xl border border-stone-200 bg-stone-50 p-4 text-sm leading-7 text-stone-800">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="font-semibold text-stone-950">地格細節與快速操作</p>
+            <p className="font-semibold text-stone-950">地格細節</p>
             <span className="rounded-full bg-white px-3 py-1 text-xs text-stone-600">目前焦點：{focusTile?.tileId ?? "—"}</span>
           </div>
           {focusTile ? (
@@ -448,9 +557,8 @@ export function GuardianHeartMapStage(props: {
               <p className="mt-2 font-medium">{focusTile.nameZh}｜{fullKindLabel(focusTile.kind)}</p>
               <p className="mt-1 text-stone-600">{kindEffectSummary(focusTile)}</p>
               <p className="mt-1 text-stone-600">{focusRouteHintZh}</p>
-              <p className="mt-1 text-stone-600">相鄰地格：{focusTileAdjacentTiles.map((tile) => `${tile.tileId} ${tile.nameZh}`).join("、") || "無"}</p>
-              <p className="mt-1 text-stone-600">同格玩家：{focusTileOccupants.length > 0 ? focusTileOccupants.map((player) => `${player.seatId}｜${player.displayName}`).join("、") : "目前無玩家"}</p>
-              <p className="mt-1 text-stone-600">相鄰互助：{focusTileAdjacentHelpTargets.length > 0 ? `若你要支援這格玩家，可直接從下方按鈕對其轉移 SR / SP。` : focusTile && viewerPlayer?.positionTileId === focusTile.tileId ? "你站在這格，但這格上的其他玩家不屬於相鄰互助對象；相鄰互助需要支援相鄰地格的隊友。" : "目前這格沒有你可直接相鄰互助的對象。"}</p>
+              <p className="mt-1 text-stone-600">同格玩家：{focusTileOccupants.length > 0 ? focusTileOccupants.map((player) => `${player.seatId}｜${player.displayName}`).join("、") : "無"}</p>
+              <p className="mt-1 text-stone-600">相鄰互助：{focusTileAdjacentHelpTargets.length > 0 ? "有可支援隊友。" : focusTile && viewerPlayer?.positionTileId === focusTile.tileId ? "同格不算相鄰目標。" : "暫無可支援對象。"}</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 {focusTileAdjacentTiles.map((tile) => (
                   <button
@@ -465,12 +573,12 @@ export function GuardianHeartMapStage(props: {
               </div>
               <div className="mt-4 grid gap-3 lg:grid-cols-2">
                 <div className="rounded-2xl border border-sky-200 bg-sky-50 p-3 text-sm leading-6 text-sky-950">
-                  <p className="font-semibold">最新地圖操作回饋</p>
-                  <p className="mt-1 text-sky-900">{latestActionFeedbackZh ?? "尚未從地圖送出新的移動、互助或地格使用。"}</p>
+                  <p className="font-semibold">地圖回饋</p>
+                  <p className="mt-1 text-sky-900">{latestActionFeedbackZh ?? "暫無地圖操作。"}</p>
                 </div>
                 <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-950">
-                  <p className="font-semibold">任務解鎖／角色能力提示</p>
-                  <p className="mt-1 text-amber-900">{pressureTaskUnlockStatusZh ?? "目前沒有額外的互助門檻提示。"}</p>
+                  <p className="font-semibold">任務／能力提示</p>
+                  <p className="mt-1 text-amber-900">{pressureTaskUnlockStatusZh ?? "暫無提示。"}</p>
                   {roleAbilityHintsZh.length > 0 ? (
                     <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-amber-900">
                       {roleAbilityHintsZh.map((hint) => (
@@ -499,123 +607,23 @@ export function GuardianHeartMapStage(props: {
                   使用此地格效果
                 </button>
               </div>
-              <div className="mt-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-sm leading-6 text-emerald-950">
-                <p className="font-semibold">相鄰互助快捷列</p>
-                <p className="mt-1 text-xs text-emerald-800">
-                  僅列出目前與你相鄰、可直接接受 0AP 相鄰互助的隊友。{canUseMessengerAbility ? " 若你想連動〈牽起連結〉的免費移動，仍可改用下方完整表單。" : ""}{canUseMedicBonusHint ? " 若你以 SP 互助，白衣見習生的〈安定陪伴〉可望再讓對方額外回 1SP。" : ""}
-                </p>
-                {focusTileAdjacentHelpTargets.length > 0 ? (
-                  <div className="mt-3 space-y-2">
-                    {focusTileAdjacentHelpTargets.map((target) => (
-                      <div key={`help-${target.seatId}`} className="rounded-2xl border border-emerald-200 bg-white px-3 py-3">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div>
-                            <p className="font-medium">{target.seatId}｜{target.displayName}{target.isAi ? "（AI）" : ""}</p>
-                            <p className="text-xs text-stone-600">所在位置：{target.positionTileId ?? "—"}｜SR {target.currentSr}／SP {target.currentSp}</p>
-                          </div>
-                          <div className="flex flex-wrap gap-2">
-                            <button
-                              type="button"
-                              className="rounded-xl bg-emerald-700 px-3 py-2 text-xs font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
-                              disabled={!canUseDirectMapActions || !canUseAdjacentHelp || !onAdjacentHelp}
-                              onClick={() => onAdjacentHelp?.(target.seatId, "SP")}
-                            >
-                              對 {target.seatId} 轉移 SP{canUseMedicBonusHint ? "（含安定陪伴提示）" : ""}
-                            </button>
-                            <button
-                              type="button"
-                              className="rounded-xl bg-amber-700 px-3 py-2 text-xs font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
-                              disabled={!canUseDirectMapActions || !canUseAdjacentHelp || !onAdjacentHelp}
-                              onClick={() => onAdjacentHelp?.(target.seatId, "SR")}
-                            >
-                              對 {target.seatId} 轉移 SR
-                            </button>
-                            {canUseMessengerAbility && target.followMoveChoices && target.followMoveChoices.length > 0 ? (
-                              <div className="flex flex-wrap items-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-2 py-2">
-                                <select
-                                  className="rounded-lg border border-violet-200 bg-white px-2 py-1 text-[11px] text-stone-900"
-                                  value={selectedFollowMoveBySeat[target.seatId] ?? ""}
-                                  onChange={(event) => setSelectedFollowMoveBySeat((current) => ({ ...current, [target.seatId]: event.target.value }))}
-                                >
-                                  <option value="">牽起連結：選擇免費移動</option>
-                                  {target.followMoveChoices.map((choice) => (
-                                    <option key={`${target.seatId}-${choice.moveSeat}-${choice.moveToTileId}`} value={`${choice.moveSeat}::${choice.moveToTileId}`}>
-                                      {choice.labelZh}
-                                    </option>
-                                  ))}
-                                </select>
-                                <button
-                                  type="button"
-                                  className="rounded-lg bg-violet-700 px-2 py-1 text-[11px] font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
-                                  disabled={
-                                    !canUseDirectMapActions
-                                    || !canUseAdjacentHelp
-                                    || !onAdjacentHelp
-                                    || !(selectedFollowMoveBySeat[target.seatId] ?? "").includes("::")
-                                  }
-                                  onClick={() => {
-                                    const selected = selectedFollowMoveBySeat[target.seatId] ?? "";
-                                    const [moveSeat, moveToTileId] = selected.split("::");
-                                    if (!moveSeat || !moveToTileId) return;
-                                    onAdjacentHelp?.(target.seatId, "SP", { moveSeat: moveSeat as SeatId, moveToTileId });
-                                  }}
-                                >
-                                  SP＋免費移動
-                                </button>
-                                <button
-                                  type="button"
-                                  className="rounded-lg bg-violet-900 px-2 py-1 text-[11px] font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
-                                  disabled={
-                                    !canUseDirectMapActions
-                                    || !canUseAdjacentHelp
-                                    || !onAdjacentHelp
-                                    || !(selectedFollowMoveBySeat[target.seatId] ?? "").includes("::")
-                                  }
-                                  onClick={() => {
-                                    const selected = selectedFollowMoveBySeat[target.seatId] ?? "";
-                                    const [moveSeat, moveToTileId] = selected.split("::");
-                                    if (!moveSeat || !moveToTileId) return;
-                                    onAdjacentHelp?.(target.seatId, "SR", { moveSeat: moveSeat as SeatId, moveToTileId });
-                                  }}
-                                >
-                                  SR＋免費移動
-                                </button>
-                              </div>
-                            ) : null}
-                          </div>
-                        </div>
-                        {canUseMedicBonusHint || canUseMessengerAbility ? (
-                          <div className="mt-2 space-y-1 text-[11px] text-stone-600">
-                            {canUseMedicBonusHint ? <p>• 你目前若以 SP 互助，系統應一併檢查〈安定陪伴〉的額外 1SP。</p> : null}
-                            {canUseMessengerAbility ? <p>• 你現在也可直接在此選擇〈牽起連結〉的免費移動目標；若想精細指定，仍可改用下方完整互助表單。</p> : null}
-                          </div>
-                        ) : null}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="mt-2 text-xs text-emerald-900">目前焦點地格沒有可直接支援的相鄰隊友。你可改點其他相鄰地格查看，或用下方完整互助表單指定目標。</p>
-                )}
-              </div>
               {actionDisabledReasonZh ? <p className="mt-2 text-xs text-stone-500">目前不能直接從地圖操作：{actionDisabledReasonZh}</p> : null}
             </>
           ) : (
-            <p className="mt-2 text-stone-600">請先點選地格。</p>
+            <p className="mt-2 text-stone-600">先選地格。</p>
           )}
         </div>
 
         <div className="rounded-2xl border border-stone-200 bg-stone-50 p-4 text-sm leading-7 text-stone-800">
-          <p className="font-semibold text-stone-950">地圖閱讀提示</p>
+          <p className="font-semibold text-stone-950">快速圖例</p>
           <ul className="mt-2 space-y-1 text-stone-700">
             <li>• 風險地格為粉紅，物資站為金色，庇護所為藍色。</li>
             <li>• 綠色外圈代表你現在可合法移動到的目標。</li>
             <li>• 黃色外圈代表你已選為本回合的移動目標。</li>
             <li>• 深色 token 是你自己；金色強調的是目前行動中的座位。</li>
-            <li>• 把滑鼠移到地格上可暫時聚焦鄰接線，點一下可鎖定細節面板。</li>
-            <li>• 若相鄰地格上有隊友，右側會顯示互助快捷列，可直接送出 0AP 相鄰互助。</li>
-            <li>• 若你是街巷信使且本輪能力仍可用，互助快捷列也可直接帶入〈牽起連結〉的免費移動。</li>
-            <li>• 互助後的最新結果回饋、壓力 6 任務解鎖狀態，以及白衣見習生／街巷信使提示，現在都會顯示在地圖細節區。</li>
-            <li>• 若你已站在物資站或庇護所上，可直接從地圖右側按鈕使用該地格效果。</li>
+            <li>• 點相鄰隊友 token，可直接開啟互助選單。</li>
+            <li>• 進階提示會顯示在地圖細節區。</li>
+            <li>• 站在物資站或庇護所上時，可直接使用地格效果。</li>
           </ul>
         </div>
       </div>

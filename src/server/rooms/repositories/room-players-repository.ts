@@ -85,6 +85,24 @@ export async function listRoomPlayers(params: {
   return (data as RoomPlayerRow[]) ?? [];
 }
 
+export async function listRoomPlayersForRoomIds(params: {
+  client: SupabaseClient;
+  roomIds: string[];
+}): Promise<RoomPlayerRow[]> {
+  const { client, roomIds } = params;
+
+  if (roomIds.length === 0) return [];
+
+  const { data, error } = await client
+    .from("room_players")
+    .select(ROOM_PLAYER_COLUMNS)
+    .in("room_id", roomIds)
+    .order("created_at", { ascending: true });
+
+  if (error) throw error;
+  return (data as RoomPlayerRow[]) ?? [];
+}
+
 export async function findRoomPlayerByJoinTokenHash(params: {
   client: SupabaseClient;
   roomId: string;

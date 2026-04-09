@@ -21,7 +21,6 @@ import type {
   ActionFeedItem,
   CardChannelSection,
   CardMetaPill,
-  CardReservedSlot,
 } from "@/components/guardian-heart/room-client-desktop-types";
 
 type Props = {
@@ -33,7 +32,6 @@ type Props = {
   eventPenaltyZh: string;
   eventMetaPills?: CardMetaPill[];
   eventChannelSections?: CardChannelSection[];
-  eventReservedSlots?: CardReservedSlot[];
   roundValueZh: string;
   pressureValue: number;
   remainingDaysZh?: string | null;
@@ -54,7 +52,7 @@ type Props = {
   focusSummaryZh: string;
   onSelectTask: (taskId: string) => void;
   onDeclareTask: (taskId: string) => void;
-  onSelectCard: (cardId: string) => void;
+  onSelectCard: (cardId: string, instanceKey: string) => void;
   onSelectCardTarget?: (seat: string) => void;
   onSelectCardTile?: (tileId: string) => void;
   onSelectCardResource?: (value: "SR" | "SP") => void;
@@ -88,34 +86,30 @@ function TaskPill({ item, onSelect }: { item: TaskRailItem; onSelect: (taskId: s
         ? "border-sky-300 bg-sky-50 text-sky-800"
         : item.tone === "rose"
           ? "border-rose-300 bg-rose-50 text-rose-800"
-          : "border-stone-200 bg-white text-stone-700";
+          : "border-[#D9DEC0] bg-white text-stone-700";
 
   return (
-    <div className="group relative">
-      <button
-        type="button"
-        onClick={() => onSelect(item.taskId)}
-        className={[
-          "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] whitespace-nowrap transition",
-          item.isSelected
-            ? "border-sky-500 bg-sky-50 text-sky-900 shadow-[0_2px_8px_rgba(56,189,248,0.14)]"
-            : toneClasses,
-          !item.isSelected && !item.isDone ? "hover:border-sky-300 hover:bg-sky-50/35" : "",
-        ].join(" ")}
-      >
-        <span className={[
-          "h-1.5 w-1.5 flex-none rounded-full",
-          item.isDone ? "bg-emerald-400" : item.canDeclare ? "animate-pulse bg-emerald-500" : item.tone === "amber" ? "bg-amber-400" : item.tone === "sky" ? "bg-sky-400" : "bg-stone-300",
-        ].join(" ")} />
-        <span className="max-w-[92px] truncate font-medium">{item.title}</span>
-        <span className="rounded-full bg-white/80 px-1.5 py-0.5 text-[9px] text-stone-500">{item.badgeZh}</span>
-      </button>
-      <div className="pointer-events-none absolute left-1/2 top-[calc(100%+10px)] z-20 hidden w-[280px] -translate-x-1/2 rounded-[16px] border border-stone-200 bg-white/98 px-3 py-2 text-left shadow-xl backdrop-blur group-hover:block">
-        <p className="text-[10px] font-semibold text-stone-900">{item.title}</p>
-        <p className="mt-1 text-[10px] leading-5 text-stone-600">{item.summaryZh ?? item.hint}</p>
-        <p className="mt-1 text-[9px] leading-4 text-stone-500">獎勵：{item.reward}</p>
-      </div>
-    </div>
+    <button
+      type="button"
+      title={`${item.title}｜${item.badgeZh}`}
+      onClick={() => onSelect(item.taskId)}
+      className={[
+        "inline-flex w-full min-w-0 items-center justify-between gap-2 rounded-full border px-3 py-1.5 text-[11px] transition",
+        item.isSelected
+          ? "border-sky-500 bg-sky-50 text-sky-900 shadow-[0_2px_8px_rgba(56,189,248,0.14)]"
+          : toneClasses,
+        !item.isSelected && !item.isDone ? "hover:border-sky-300 hover:bg-sky-50/35" : "",
+      ].join(" ")}
+    >
+      <span className={[
+        "h-1.5 w-1.5 flex-none rounded-full",
+        item.isDone ? "bg-emerald-400" : item.canDeclare ? "animate-pulse bg-emerald-500" : item.tone === "amber" ? "bg-amber-400" : item.tone === "sky" ? "bg-sky-400" : "bg-stone-300",
+      ].join(" ")} />
+      <span className="min-w-0 flex-1 truncate font-medium">{item.title}</span>
+      {item.railStatusZh ? (
+        <span className="flex-none rounded-full bg-white/80 px-1.5 py-0.5 text-[8px] text-stone-500">{item.railStatusZh}</span>
+      ) : null}
+    </button>
   );
 }
 
@@ -130,29 +124,29 @@ function PlayerRosterRow({ item, onSelectTarget }: { item: RosterItem; onSelectT
       : item.canSelectTarget
         ? "border-sky-200 bg-sky-50/40 hover:border-sky-400 hover:bg-sky-50"
         : item.isActive
-          ? "border-amber-300 bg-amber-50/80"
-          : "border-stone-200 bg-white",
+          ? "border-[#D6DDB8] bg-[#F4F7E9]"
+          : "border-[#D9DEC0] bg-white",
   ].join(" ");
 
   const content = (
     <>
       <div className="flex items-center justify-between gap-1">
-        <span className="truncate text-[12px] font-semibold text-stone-900">{item.seat} {item.name}</span>
+        <span className="truncate text-[11px] font-semibold text-stone-900">{item.seat} {item.name}</span>
         <div className="flex gap-1">
-          {item.isViewer ? <span className="rounded-full bg-stone-900 px-1.5 py-0.5 text-[8px] text-white">你</span> : null}
-          {item.isActive ? <span className="rounded-full bg-amber-200 px-1.5 py-0.5 text-[8px] text-amber-900">行動中</span> : null}
+          {item.isViewer ? <span className="rounded-full bg-[#5E6B2C] px-1.5 py-0.5 text-[8px] text-white">你</span> : null}
+          {item.isActive ? <span className="rounded-full bg-[#EAF1D4] px-1.5 py-0.5 text-[8px] text-[#5E6B2C]">行動中</span> : null}
         </div>
       </div>
       <div className="mt-1 flex items-center gap-1.5 text-[9px] text-stone-500">
         <span className="line-clamp-1">{item.roleName}</span>
-        {item.roleAbilityName ? <span className="rounded-full bg-violet-50 px-1.5 py-0.5 text-[8px] text-violet-700">{item.roleAbilityName}</span> : null}
+        {item.roleAbilityName ? <span className="rounded-full bg-violet-50/80 px-1.5 py-0.5 text-[8px] text-violet-700">{item.roleAbilityName}</span> : null}
       </div>
       <div className="mt-1 flex flex-wrap items-center gap-1 text-[10px]">
         <span className="rounded-md bg-stone-100 px-1.5 py-0.5">SR <b>{item.sr}</b></span>
         <span className="rounded-md bg-stone-100 px-1.5 py-0.5">SP <b>{item.sp}</b></span>
         <span className="rounded-md bg-stone-100 px-1.5 py-0.5 text-[9px] text-stone-600">{item.companionUsed ? "陪伴已用" : "陪伴"}</span>
         {typeof item.roleAbilityUsesRemaining === "number" && typeof item.roleAbilityUsesTotal === "number" ? <span className="rounded-full bg-violet-50 px-1.5 py-0.5 text-[8px] text-violet-700">技能 {item.roleAbilityUsesRemaining}/{item.roleAbilityUsesTotal}</span> : null}
-        {shouldShowAbilityStateBadge ? <span className={["rounded-full border px-1.5 py-0.5 text-[8px]", item.abilityStateTone === "emerald" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : item.abilityStateTone === "amber" ? "border-amber-200 bg-amber-50 text-amber-700" : item.abilityStateTone === "rose" ? "border-rose-200 bg-rose-50 text-rose-700" : item.abilityStateTone === "violet" ? "border-violet-200 bg-violet-50 text-violet-700" : "border-stone-200 bg-stone-50 text-stone-600"].join(" ")}>{item.abilityStateLabelZh}</span> : null}
+        {shouldShowAbilityStateBadge ? <span className={["rounded-full border px-1.5 py-0.5 text-[8px]", item.abilityStateTone === "emerald" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : item.abilityStateTone === "amber" ? "border-amber-200 bg-amber-50 text-amber-700" : item.abilityStateTone === "rose" ? "border-rose-200 bg-rose-50 text-rose-700" : item.abilityStateTone === "violet" ? "border-violet-200 bg-violet-50 text-violet-700" : "border-[#D9DEC0] bg-[#FAFBF6] text-stone-600"].join(" ")}>{item.abilityStateLabelZh}</span> : null}
       </div>
       {item.targetHintZh ? (
         <div className="mt-1 text-[9px]">
@@ -187,12 +181,12 @@ function RoleSkillPanel({ item }: { item: RosterItem | null }) {
   }
 
   return (
-    <div className="rounded-[14px] border border-violet-200 bg-violet-50/70 px-2.5 py-2 shadow-sm">
+    <div className="rounded-[14px] border border-violet-200 bg-violet-50/60 px-2.5 py-2 shadow-[0_6px_14px_rgba(109,40,217,0.06)]">
       <div className="flex items-center justify-between gap-2">
         <p className="text-[10px] font-semibold text-violet-700">角色技能</p>
         <span className="rounded-full bg-white px-2 py-0.5 text-[8px] font-medium text-violet-700">{item.roleName}</span>
       </div>
-      <p className="mt-1 text-[9px] leading-4 text-stone-700">{item.roleAbilitySummary}</p>
+      <p className="mt-1 text-[9px] leading-4 text-stone-600">{item.roleAbilitySummary}</p>
     </div>
   );
 }
@@ -211,7 +205,7 @@ function CollapsibleAbilityPanels({
   }
 
   return (
-    <div className="rounded-[16px] border border-stone-200 bg-white p-2 shadow-sm">
+    <div className="rounded-[16px] border border-[#D9DEC0] bg-[#FCFCFA] p-2 shadow-[0_8px_20px_rgba(94,107,44,0.035)]">
       <div className="flex items-center justify-between gap-2">
         <div>
           <p className="text-[10px] font-semibold text-violet-700">角色資訊</p>
@@ -219,14 +213,14 @@ function CollapsibleAbilityPanels({
         </div>
         <button
           type="button"
-          className="rounded-full border border-stone-300 bg-white px-2.5 py-1 text-[10px] font-medium text-stone-700 hover:bg-stone-50"
+          className="rounded-full border border-[#C8D1A7] bg-white px-2.5 py-1 text-[10px] font-medium text-[#5E6B2C] transition hover:bg-[#F0F4E2]"
           onClick={() => setCollapsed((current) => !current)}
         >
           {collapsed ? "展開" : "摺疊"}
         </button>
       </div>
       {collapsed ? (
-        <div className="mt-2 rounded-[12px] border border-dashed border-stone-200 bg-stone-50 px-3 py-4 text-center text-[10px] text-stone-500">
+        <div className="mt-2 rounded-[12px] border border-dashed border-[#D9DEC0] bg-[#FAFBF6] px-3 py-4 text-center text-[10px] text-stone-500">
           已摺疊角色技能資訊
         </div>
       ) : (
@@ -245,31 +239,31 @@ function MapApOverlay({ item }: { item: RosterItem | null }) {
   }
 
   return (
-    <div className="pointer-events-none absolute right-3 top-3 z-10 inline-flex items-center gap-2 rounded-full border border-stone-200 bg-white/92 px-2.5 py-1 text-[10px] text-stone-700 shadow-sm backdrop-blur-[2px]">
+    <div className="pointer-events-none absolute right-3 top-3 z-10 inline-flex items-center gap-2 rounded-full border border-[#D9DEC0] bg-white/92 px-2.5 py-1 text-[10px] text-stone-700 shadow-[0_8px_20px_rgba(94,107,44,0.06)] backdrop-blur-[2px]">
       <span className="text-stone-500">目前行動</span>
       <span className="font-semibold text-stone-900">{item.seat}</span>
-      <span className="font-semibold text-amber-700">AP {item.ap}</span>
+      <span className="font-semibold text-[#5E6B2C]">AP {item.ap}</span>
     </div>
   );
 }
 
-function HandCard({ item, onSelect }: { item: HandItem; onSelect: (cardId: string) => void }) {
+function HandCard({ item, onSelect }: { item: HandItem; onSelect: (cardId: string, instanceKey: string) => void }) {
   const categoryLabel = item.category === "mobility" ? "機動" : item.category === "event_response" ? "事件" : "支援";
   return (
     <button
       type="button"
-      onClick={() => onSelect(item.cardId)}
+      onClick={() => onSelect(item.cardId, item.instanceKey)}
       className={[
         "w-full rounded-[14px] border px-2.5 py-2 text-left transition",
-        item.selected ? "border-sky-400 bg-sky-50 shadow-[0_2px_8px_rgba(56,189,248,0.12)]" : "border-stone-200 bg-white hover:border-sky-300 hover:bg-sky-50/25",
+        item.selected ? "border-sky-400 bg-sky-50 shadow-[0_2px_8px_rgba(56,189,248,0.12)]" : "border-[#D9DEC0] bg-white hover:border-sky-300 hover:bg-sky-50/25",
       ].join(" ")}
     >
       <div className="flex items-start justify-between gap-1.5">
         <span className="line-clamp-1 text-[11px] font-bold leading-5 text-stone-900">{item.title}</span>
-        <span className="rounded-full border border-stone-200 px-1.5 py-0.5 text-[8px] text-stone-500">{categoryLabel}</span>
+        <span className="rounded-full border border-[#D9DEC0] bg-[#FAFBF6] px-1.5 py-0.5 text-[8px] text-stone-500">{categoryLabel}</span>
       </div>
       <DesktopCardMetaStrip items={item.metaPills ?? []} className="mt-1" />
-      <p className="mt-1 line-clamp-1 text-[10px] leading-4 text-stone-600">{item.description}</p>
+      <p className="mt-1 line-clamp-1 text-[10px] leading-4 text-stone-500">{item.description}</p>
     </button>
   );
 }
@@ -282,7 +276,6 @@ export function DesktopSinglePageSurface(props: Props) {
     eventPenaltyZh,
     eventMetaPills = [],
     eventChannelSections = [],
-    eventReservedSlots = [],
     roundValueZh,
     pressureValue,
     remainingDaysZh,
@@ -330,9 +323,10 @@ export function DesktopSinglePageSurface(props: Props) {
   const activeRosterItem = roster.find((item) => item.isActive)
     ?? roster.find((item) => item.isViewer)
     ?? null;
+  const taskRailShouldUseGrid = tasks.length > 0 && tasks.length <= 5;
 
   return (
-    <section className="space-y-1.5 rounded-[24px] border border-[#D9DEC0] bg-[#FBFBF7] p-2 shadow-sm">
+    <section className="space-y-1.5 rounded-[24px] border border-[#D9DEC0] bg-[#F8F8F2] p-2 shadow-sm">
       <DesktopSinglePageHeader
         eventTitleZh={eventTitleZh}
         eventRequirementZh={eventRequirementZh}
@@ -340,7 +334,6 @@ export function DesktopSinglePageSurface(props: Props) {
         eventPenaltyZh={eventPenaltyZh}
         eventMetaPills={eventMetaPills}
         eventChannelSections={eventChannelSections}
-        eventReservedSlots={eventReservedSlots}
         pressureValue={pressureValue}
         roundValueZh={roundValueZh}
         remainingDaysZh={remainingDaysZh}
@@ -362,13 +355,18 @@ export function DesktopSinglePageSurface(props: Props) {
           <div
             id="gh-guide-zone-tasks"
             className={[
-              "flex items-center gap-2 rounded-[16px] border border-[#E7EAD6] bg-white px-2 py-1",
+              "flex items-center gap-2 rounded-[16px] border border-[#DDE3C7] bg-white px-2 py-1",
               pulseTaskRail ? "animate-pulse" : "",
             ].join(" ")}
           >
             <span className="flex-none text-[10px] font-semibold text-[#5E6B2C]">任務</span>
             <div className="min-w-0 flex-1 overflow-x-auto [scrollbar-width:none]">
-              <div className="flex min-w-max items-center gap-1.5 pr-2">
+              <div className={[
+                "pr-2",
+                taskRailShouldUseGrid
+                  ? "grid min-w-[720px] grid-cols-5 gap-1.5 xl:min-w-0"
+                  : "flex min-w-max items-center gap-1.5",
+              ].join(" ")}>
                 {tasks.map((task) => <TaskPill key={`rail-${task.taskId}`} item={task} onSelect={onSelectTask} />)}
               </div>
             </div>
@@ -382,8 +380,8 @@ export function DesktopSinglePageSurface(props: Props) {
             </aside>
 
             <div className="min-w-0 flex-1 space-y-1.5">
-              <div className="rounded-[20px] border border-[#D9DEC0] bg-white p-1 shadow-sm">
-                <div id="gh-guide-zone-map" className="relative min-h-[700px] overflow-hidden rounded-[18px] bg-[#FCFCFA] xl:min-h-[780px]">
+              <div className="rounded-[20px] border border-[#D9DEC0] bg-white p-1 shadow-[0_12px_26px_rgba(94,107,44,0.04)]">
+                <div id="gh-guide-zone-map" className="relative min-h-[700px] overflow-hidden rounded-[18px] bg-[#FBFBF7] xl:min-h-[780px]">
                   <MapApOverlay item={activeRosterItem} />
                   {mapStage}
                 </div>
@@ -399,16 +397,16 @@ export function DesktopSinglePageSurface(props: Props) {
         <aside className="w-full space-y-1.5 xl:w-[290px] xl:flex-none">
           {selectedTaskPanel ? <DesktopSelectedTaskPanelCard panel={selectedTaskPanel} onDeclare={onDeclareTask} /> : <DesktopTaskEmptyStateCard />}
 
-          <div id="gh-guide-zone-hand" className="rounded-[16px] border border-stone-200 bg-white p-2 shadow-sm">
+          <div id="gh-guide-zone-hand" className="rounded-[16px] border border-[#D9DEC0] bg-[#FCFCFA] p-2 shadow-[0_8px_20px_rgba(94,107,44,0.03)]">
             <div className="mb-2 flex items-center justify-between gap-2 px-0.5">
               <p className="text-[10px] font-semibold text-[#5E6B2C]">手牌</p>
               <div className="flex items-center gap-1">
                 {selectedCardPanel ? <span className="rounded-full bg-sky-50 px-2 py-0.5 text-[9px] text-sky-700">已選 1 張</span> : null}
-                <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[9px] text-stone-500">{handCards.length}/3</span>
+                <span className="rounded-full bg-[#F0F4E2] px-2 py-0.5 text-[9px] text-[#5E6B2C]">{handCards.length}/3</span>
               </div>
             </div>
             <div className="space-y-1.5">
-              {handCards.length > 0 ? handCards.map((card, index) => <HandCard key={`hand-${card.cardId}-${index}`} item={card} onSelect={onSelectCard} />) : <div className="rounded-[14px] border border-dashed border-stone-200 px-3 py-3 text-center text-[10px] text-stone-400">沒有手牌</div>}
+              {handCards.length > 0 ? handCards.map((card) => <HandCard key={card.instanceKey} item={card} onSelect={onSelectCard} />) : <div className="rounded-[14px] border border-dashed border-[#D9DEC0] px-3 py-3 text-center text-[10px] text-stone-400">沒有手牌</div>}
             </div>
           </div>
 
