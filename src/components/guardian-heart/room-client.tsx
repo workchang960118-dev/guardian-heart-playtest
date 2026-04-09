@@ -711,6 +711,7 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
   const [showMobileActionFeedDrawer, setShowMobileActionFeedDrawer] = useState(false);
   const [showCenterBroadcast, setShowCenterBroadcast] = useState(false);
   const [showTurnToast, setShowTurnToast] = useState(false);
+  const [lobbyShareFeedbackZh, setLobbyShareFeedbackZh] = useState("");
   const [pulsePressure, setPulsePressure] = useState(false);
   const [pulseTaskRail, setPulseTaskRail] = useState(false);
   const [showNightTransitionModal, setShowNightTransitionModal] = useState(false);
@@ -752,6 +753,7 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
   const previousActiveSeatRef = useRef<SeatId | null>(null);
   const previousPhaseRef = useRef<GameSnapshot["phase"] | null>(null);
   const lastGuideScrollKeyRef = useRef("");
+  const lobbyShareFeedbackTimeoutRef = useRef<number | null>(null);
 
   const joinToken = searchParams.get("joinToken") ?? "";
   const displayName = searchParams.get("displayName") ?? "";
@@ -787,6 +789,39 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
     setSelectedCardTileId("");
     setSelectedCardResourceType("SP");
     setSelectedCardTeammateResourceType("SP");
+  }
+
+  function setLobbyShareFeedback(messageZh: string) {
+    setLobbyShareFeedbackZh(messageZh);
+    if (typeof window === "undefined") return;
+    if (lobbyShareFeedbackTimeoutRef.current) {
+      window.clearTimeout(lobbyShareFeedbackTimeoutRef.current);
+    }
+    lobbyShareFeedbackTimeoutRef.current = window.setTimeout(() => {
+      setLobbyShareFeedbackZh("");
+      lobbyShareFeedbackTimeoutRef.current = null;
+    }, 2600);
+  }
+
+  async function copyLobbyRoomCode() {
+    if (typeof window === "undefined") return;
+    try {
+      await navigator.clipboard.writeText(roomCode);
+      setLobbyShareFeedback(`已複製房號 ${roomCode}。玩家可用房號加入。`);
+    } catch {
+      setLobbyShareFeedback("複製失敗，請手動分享房號。");
+    }
+  }
+
+  async function copyLobbyObserverLink() {
+    if (typeof window === "undefined") return;
+    const observerUrl = `${window.location.origin}/rooms/${roomCode}`;
+    try {
+      await navigator.clipboard.writeText(observerUrl);
+      setLobbyShareFeedback("已複製旁觀連結。分享給其他人可直接旁觀。");
+    } catch {
+      setLobbyShareFeedback("複製失敗，請手動複製旁觀連結。");
+    }
   }
 
   async function bootstrap() {
@@ -839,6 +874,14 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
     void bootstrap();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomCode]);
+
+  useEffect(() => {
+    return () => {
+      if (typeof window !== "undefined" && lobbyShareFeedbackTimeoutRef.current) {
+        window.clearTimeout(lobbyShareFeedbackTimeoutRef.current);
+      }
+    };
+  }, []);
 
 
   useEffect(() => {
@@ -3343,6 +3386,31 @@ export function RoomClient({ roomCode }: { roomCode: string }) {
                   <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-500">大廳準備</p>
                   <h2 className="mt-1 text-2xl font-bold text-stone-950">先完成角色指派與 AI 補位</h2>
                   <p className="mt-2 text-sm leading-6 text-stone-600">每位真人玩家都要有角色。</p>
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <span className="rounded-full bg-stone-900 px-3 py-1 text-[11px] font-semibold text-white">
+                      房號 {data.room.roomCode}
+                    </span>
+                    <button
+                      type="button"
+                      className="rounded-full border border-stone-300 bg-white px-3 py-1 text-[11px] font-medium text-stone-700 hover:bg-stone-50"
+                      onClick={() => void copyLobbyRoomCode()}
+                    >
+                      複製房號
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-full border border-stone-300 bg-white px-3 py-1 text-[11px] font-medium text-stone-700 hover:bg-stone-50"
+                      onClick={() => void copyLobbyObserverLink()}
+                    >
+                      複製旁觀連結
+                    </button>
+                  </div>
+                  <p className="mt-2 text-xs leading-5 text-stone-500">玩家用房號加入；旁觀者可直接用旁觀連結進入。</p>
+                  {lobbyShareFeedbackZh ? (
+                    <p className="mt-2 inline-flex rounded-full bg-emerald-50 px-3 py-1 text-[11px] font-medium text-emerald-700">
+                      {lobbyShareFeedbackZh}
+                    </p>
+                  ) : null}
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <span className={`rounded-full px-3 py-1 text-xs font-medium ${missingHumanRoleSeats.length === 0 ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
