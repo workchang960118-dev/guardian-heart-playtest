@@ -14,8 +14,10 @@ import {
   markRoomPlayerConnected,
   type RoomPlayerRow,
 } from "../repositories/room-players-repository";
-import { getLatestRoomSnapshot } from "../repositories/room-snapshots-repository";
+import { getLatestRoomSnapshot, insertRoomSnapshot } from "../repositories/room-snapshots-repository";
 import { resolveRoomActor, hashJoinToken } from "../auth/resolve-room-actor";
+import { updateRoomVersionAndState } from "../repositories/rooms-repository";
+import type { PlayerState, SeatId } from "@/domain/guardian-heart/types/game";
 
 function generateJoinToken(): string {
   return randomUUID();
@@ -23,6 +25,41 @@ function generateJoinToken(): string {
 
 function generateActorBindingKey(): string {
   return randomUUID();
+}
+
+const JOINABLE_HUMAN_SEATS: SeatId[] = ["P2", "P3", "P4"];
+
+function buildLobbyPlayerState(params: { seatId: SeatId; displayName: string }): PlayerState {
+  const { seatId, displayName } = params;
+  return {
+    seatId,
+    displayName,
+    isAi: false,
+    roleId: null,
+    roleNameZh: null,
+    currentSr: 0,
+    currentSp: 0,
+    remainingAp: 0,
+    positionTileId: null,
+    companionTokensRemaining: 0,
+    handCardIds: [],
+    roleAbilityUsesRemaining: 0,
+    perRoundFlags: {
+      hasInvestedEvent: false,
+      hasAdjacentHelped: false,
+    },
+  };
+}
+
+function getNextJoinableSeat(snapshot: GameSnapshot): SeatId | null {
+  const occupiedSeats = new Set(snapshot.players.map((player) => player.seatId));
+  const aiSeats = new Set(snapshot.roomConfig.aiSeatIds);
+  for (const seatId of JOINABLE_HUMAN_SEATS) {
+    if (occupiedSeats.has(seatId)) continue;
+    if (aiSeats.has(seatId)) continue;
+    return seatId;
+  }
+  return null;
 }
 
 function buildRoomSummary(room: RoomRow): RoomSummary {
@@ -140,7 +177,81 @@ export async function bootstrapRoomService(params: {
     }
 
     if (!bootstrapAsObserver) {
-      return { ok: false, error: "REJOIN_FAILED" };
+      if (room.phase !== "lobby" || room.status !== "lobby") {
+        return { ok: false, error: "ROOM_PLAYER_JOIN_LOCKED" };
+      }
+
+      const trimmedDisplayName = displayName?.trim() ?? "";
+      if (!trimmedDisplayName) {
+        return { ok: false, error: "DISPLAY_NAME_REQUIRED" };
+      }
+
+      const joinableSeat = getNextJoinableSeat(latestSnapshot.snapshot_json);
+      if (!joinableSeat) {
+        return { ok: false, error: "ROOM_FULL" };
+      }
+
+      const playerJoinToken = generateJoinToken();
+      const playerJoinTokenHash = hashJoinToken(playerJoinToken);
+      const actorBindingKey = generateActorBindingKey();
+      const nextVersion = room.version + 1;
+      const nextSnapshot: GameSnapshot = structuredClone(latestSnapshot.snapshot_json);
+      nextSnapshot.players = [...nextSnapshot.players, buildLobbyPlayerState({ seatId: joinableSeat, displayName: trimmedDisplayName })]
+        .sort((a, b) => a.seatId.localeCompare(b.seatId));
+      nextSnapshot.roomRevision = nextVersion;
+      nextSnapshot.updatedAt = at;
+
+      await insertRoomPlayer({
+        client,
+        roomId: room.id,
+        displayName: trimmedDisplayName,
+        seatId: joinableSeat,
+        isHost: false,
+        isObserver: false,
+        joinTokenHash: playerJoinTokenHash,
+        reconnectKeyHash: null,
+        actorBindingKey,
+        at,
+      });
+
+      await insertRoomSnapshot({
+        client,
+        roomId: room.id,
+        version: nextVersion,
+        snapshot: nextSnapshot,
+      });
+
+      await updateRoomVersionAndState({
+        client,
+        roomId: room.id,
+        version: nextVersion,
+        status: nextSnapshot.status,
+        phase: nextSnapshot.phase,
+        round: nextSnapshot.round,
+        updatedAt: at,
+      });
+
+      const roomPlayers = await listRoomPlayers({
+        client,
+        roomId: room.id,
+      });
+
+      return {
+        ok: true,
+        room: {
+          ...buildRoomSummary(room),
+          version: nextVersion,
+          updatedAt: at,
+        },
+        players: roomPlayers
+          .filter((row) => row.seat_id !== null)
+          .map(buildRoomPlayerSummary),
+        snapshot: nextSnapshot,
+        viewerSeat: joinableSeat,
+        joinToken: playerJoinToken,
+        displayName: trimmedDisplayName,
+        viewerRole: "player",
+      };
     }
 
     const observerDisplayName = displayName?.trim() || "觀察者";
