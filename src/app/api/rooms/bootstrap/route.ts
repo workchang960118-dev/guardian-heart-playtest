@@ -5,12 +5,16 @@ import { bootstrapRoomService } from "@/server/rooms/services/bootstrap-room-ser
 
 function mapBootstrapErrorToStatus(code: string): number {
   if (code === "ROOM_NOT_FOUND" || code === "SNAPSHOT_NOT_FOUND") return 404;
+  if (code === "ROOM_FULL") return 409;
   return 400;
 }
 
 function mapBootstrapErrorToMessage(code: string): string {
   if (code === "ROOM_NOT_FOUND") return "找不到房間。";
   if (code === "SNAPSHOT_NOT_FOUND") return "找不到房間局面。";
+  if (code === "DISPLAY_NAME_REQUIRED") return "請先輸入顯示名稱。";
+  if (code === "ROOM_PLAYER_JOIN_LOCKED") return "這個房間目前不能再加入新玩家，請改用旁觀模式。";
+  if (code === "ROOM_FULL") return "這局的真人席位已滿，請改用旁觀模式。";
   return "無法恢復房間身分。";
 }
 
