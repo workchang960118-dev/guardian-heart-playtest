@@ -145,6 +145,7 @@ export function getEligibleMerchantGuardsForLoss(params: {
   if (!target?.positionTileId) return [];
   return snapshot.players.filter((player) => {
     if (player.roleId !== "merchant_guard") return false;
+    if (player.seatId === lossItem.targetSeat) return false;
     if (!isRoleAbilityEnabled(snapshot, player.roleId)) return false;
     if (player.roleAbilityUsesRemaining <= 0) return false;
     if (!player.positionTileId) return false;

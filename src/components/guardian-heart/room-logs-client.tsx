@@ -82,9 +82,23 @@ function actionTypeLabelZh(value: string) {
   return ACTION_TYPE_LABEL_ZH[value] ?? value.replaceAll("_", " ");
 }
 
-function actionTypeLabelWithRawZh(value: string) {
+function actionTypeDebugTitleZh(value: string) {
   const zh = actionTypeLabelZh(value);
   return zh === value ? zh : `${zh}（${value}）`;
+}
+
+function formatTimestampZh(value: string, options?: { withYear?: boolean; withSeconds?: boolean }) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("zh-TW", {
+    year: options?.withYear ? "numeric" : undefined,
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: options?.withSeconds ? "2-digit" : undefined,
+    hour12: false,
+  }).format(date);
 }
 
 function describePlayerDiff(entry: ActionLogEntry) {
@@ -209,7 +223,7 @@ export function RoomLogsClient(params: {
     const actorCount = new Set(filteredLogs.map((entry) => entry.actorLabelZh)).size;
     const phaseCount = new Set(filteredLogs.map((entry) => entry.phase)).size;
     const latest = filteredLogs[0]?.timestamp ?? logs[0]?.timestamp ?? "目前沒有正式操作紀錄";
-    return { actorCount, phaseCount, latest };
+    return { actorCount, phaseCount, latest: latest === "目前沒有正式操作紀錄" ? latest : formatTimestampZh(latest, { withYear: true, withSeconds: true }) };
   }, [filteredLogs, logs]);
 
   const aggregate = useMemo(() => {
@@ -240,100 +254,116 @@ export function RoomLogsClient(params: {
         <div className="rounded-3xl bg-white p-6 shadow-sm">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <p className="text-sm font-semibold text-rose-700">房間完整紀錄頁</p>
-              <h1 className="mt-1 text-3xl font-bold">{roomCode}｜行為紀錄分析</h1>
+              <p className="text-sm font-semibold text-rose-700">房間紀錄</p>
+              <h1 className="mt-1 text-3xl font-bold">{roomCode}｜完整紀錄</h1>
               <p className="mt-2 text-sm leading-7 text-stone-600">
-                這一頁不是單純把 log 拉長，而是讓你能依 round / phase / actor 篩選，回看桌測或模擬時的主要分歧點。
+                挑出想看的回合與操作者，快速回看這局發生了什麼。
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Link href={`/rooms/${roomCode}?joinToken=${encodeURIComponent(joinToken)}&displayName=${encodeURIComponent(displayName)}`} className="rounded-xl border border-stone-300 px-3 py-2 text-sm font-medium text-stone-700 hover:bg-stone-50">返回房間頁</Link>
-              <Link href={`/simulation`} className="rounded-xl bg-stone-900 px-3 py-2 text-sm font-medium text-white hover:bg-stone-800">前往模擬比較頁</Link>
+              <Link href={`/rooms/${roomCode}?joinToken=${encodeURIComponent(joinToken)}&displayName=${encodeURIComponent(displayName)}`} className="rounded-xl border border-stone-300 px-3 py-2 text-sm font-medium text-stone-700 hover:bg-stone-50">回房間</Link>
+              <Link href={`/simulation`} className="rounded-xl bg-stone-900 px-3 py-2 text-sm font-medium text-white hover:bg-stone-800">模擬比較</Link>
             </div>
           </div>
         </div>
 
         <div className="grid gap-4 lg:grid-cols-4">
           <div className="rounded-3xl bg-white p-5 shadow-sm lg:col-span-3">
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-8 mb-4">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4 mb-4">
               <div className="rounded-2xl border border-stone-200 bg-stone-50 p-3 text-sm">
-                <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">篩選後筆數</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">顯示筆數</p>
                 <p className="mt-1 text-2xl font-bold text-stone-900">{filteredLogs.length}</p>
               </div>
               <div className="rounded-2xl border border-stone-200 bg-stone-50 p-3 text-sm">
-                <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">涵蓋 round</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">涵蓋回合</p>
                 <p className="mt-1 text-2xl font-bold text-stone-900">{aggregate.uniqueRounds}</p>
               </div>
               <div className="rounded-2xl border border-stone-200 bg-stone-50 p-3 text-sm">
-                <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">失敗率</p>
-                <p className="mt-1 text-2xl font-bold text-stone-900">{aggregate.failureRate}%</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">失敗訊號</p>
+                <p className="mt-1 text-2xl font-bold text-stone-900">{aggregate.failedCount}</p>
+                <p className="mt-1 text-[11px] text-stone-500">約 {aggregate.failureRate}%</p>
               </div>
               <div className="rounded-2xl border border-stone-200 bg-stone-50 p-3 text-sm">
-                <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">阻塞視窗變化率</p>
-                <p className="mt-1 text-2xl font-bold text-stone-900">{aggregate.blockingRate}%</p>
-              </div>
-              <div className="rounded-2xl border border-stone-200 bg-stone-50 p-3 text-sm 2xl:col-span-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">phase 分布</p>
-                <div className="mt-2 flex flex-wrap gap-2 text-xs text-stone-700">
-                  {aggregate.phaseCounts.length > 0 ? aggregate.phaseCounts.map(([phase, count]) => (
-                    <span key={phase} className="rounded-full bg-white px-2 py-1 font-medium text-stone-700">{phase} {count}</span>
-                  )) : <span className="text-stone-500">目前沒有可統計資料</span>}
-                </div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">阻塞切換</p>
+                <p className="mt-1 text-2xl font-bold text-stone-900">{aggregate.blockingChanges}</p>
+                <p className="mt-1 text-[11px] text-stone-500">約 {aggregate.blockingRate}%</p>
               </div>
             </div>
-            <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
-              <label className="text-sm">
-                <span className="mb-1 block font-medium text-stone-700">篩選 phase</span>
-                <select className="w-full rounded-xl border border-stone-300 px-3 py-2" value={selectedPhase} onChange={(event) => setSelectedPhase(event.target.value as "ALL" | GamePhase)}>
-                  {PHASE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.labelZh}</option>)}
-                </select>
-              </label>
-              <label className="text-sm">
-                <span className="mb-1 block font-medium text-stone-700">篩選 actor</span>
-                <select className="w-full rounded-xl border border-stone-300 px-3 py-2" value={selectedActor} onChange={(event) => setSelectedActor(event.target.value)}>
-                  {actorOptions.map((option) => <option key={option} value={option}>{option === "ALL" ? "全部 actor" : option}</option>)}
-                </select>
-              </label>
-              <label className="text-sm">
-                <span className="mb-1 block font-medium text-stone-700">篩選 round</span>
-                <select className="w-full rounded-xl border border-stone-300 px-3 py-2" value={selectedRound} onChange={(event) => setSelectedRound(event.target.value)}>
-                  {roundOptions.map((option) => <option key={option} value={option}>{option === "ALL" ? "全部回合" : `第 ${option} 輪`}</option>)}
-                </select>
-              </label>
-              <label className="text-sm">
-                <span className="mb-1 block font-medium text-stone-700">操作類型</span>
-                <select className="w-full rounded-xl border border-stone-300 px-3 py-2" value={selectedActionType} onChange={(event) => setSelectedActionType(event.target.value)}>
-                  {actionTypeOptions.map((option) => <option key={option} value={option}>{option === "ALL" ? "全部 action" : option}</option>)}
-                </select>
-              </label>
-              <label className="text-sm">
-                <span className="mb-1 block font-medium text-stone-700">阻塞視窗狀態</span>
-                <select className="w-full rounded-xl border border-stone-300 px-3 py-2" value={selectedBlocking} onChange={(event) => setSelectedBlocking(event.target.value as (typeof BLOCKING_OPTIONS)[number]["value"])}>
-                  {BLOCKING_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.labelZh}</option>)}
-                </select>
-              </label>
-              <label className="text-sm">
+            <div className="rounded-2xl border border-stone-200 bg-stone-50 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">階段分布</p>
+                <span className="text-[11px] text-stone-500">快速看這次篩選落在哪些流程</span>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-2 text-xs text-stone-700">
+                {aggregate.phaseCounts.length > 0 ? aggregate.phaseCounts.map(([phase, count]) => (
+                  <span key={phase} className="rounded-full bg-white px-2 py-1 font-medium text-stone-700">{phaseLabelZh(phase as GamePhase)} {count}</span>
+                )) : <span className="text-stone-500">目前沒有可統計資料</span>}
+              </div>
+            </div>
+            <div className="mt-4 rounded-2xl border border-stone-200 bg-white p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">快速篩選</p>
+                  <p className="mt-1 text-[11px] text-stone-500">先縮小範圍，再展開需要的紀錄。</p>
+                </div>
+              </div>
+              <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+                <label className="text-sm">
+                  <span className="mb-1 block font-medium text-stone-700">階段</span>
+                  <select className="w-full rounded-xl border border-stone-300 px-3 py-2" value={selectedPhase} onChange={(event) => setSelectedPhase(event.target.value as "ALL" | GamePhase)}>
+                    {PHASE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.labelZh}</option>)}
+                  </select>
+                </label>
+                <label className="text-sm">
+                  <span className="mb-1 block font-medium text-stone-700">操作者</span>
+                  <select className="w-full rounded-xl border border-stone-300 px-3 py-2" value={selectedActor} onChange={(event) => setSelectedActor(event.target.value)}>
+                    {actorOptions.map((option) => <option key={option} value={option}>{option === "ALL" ? "全部操作者" : option}</option>)}
+                  </select>
+                </label>
+                <label className="text-sm">
+                  <span className="mb-1 block font-medium text-stone-700">回合</span>
+                  <select className="w-full rounded-xl border border-stone-300 px-3 py-2" value={selectedRound} onChange={(event) => setSelectedRound(event.target.value)}>
+                    {roundOptions.map((option) => <option key={option} value={option}>{option === "ALL" ? "全部回合" : `第 ${option} 輪`}</option>)}
+                  </select>
+                </label>
+                <label className="text-sm">
+                  <span className="mb-1 block font-medium text-stone-700">操作</span>
+                  <select className="w-full rounded-xl border border-stone-300 px-3 py-2" value={selectedActionType} onChange={(event) => setSelectedActionType(event.target.value)}>
+                    {actionTypeOptions.map((option) => <option key={option} value={option}>{option === "ALL" ? "全部操作" : actionTypeLabelZh(option)}</option>)}
+                  </select>
+                </label>
+                <label className="text-sm">
+                  <span className="mb-1 block font-medium text-stone-700">阻塞</span>
+                  <select className="w-full rounded-xl border border-stone-300 px-3 py-2" value={selectedBlocking} onChange={(event) => setSelectedBlocking(event.target.value as (typeof BLOCKING_OPTIONS)[number]["value"])}>
+                    {BLOCKING_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.labelZh}</option>)}
+                  </select>
+                </label>
+              </div>
+              <label className="mt-3 block text-sm">
                 <span className="mb-1 block font-medium text-stone-700">關鍵字</span>
                 <input className="w-full rounded-xl border border-stone-300 px-3 py-2" value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder="事件、互助、任務、棄牌…" />
               </label>
             </div>
           </div>
           <div className="rounded-3xl bg-white p-5 shadow-sm">
-            <p className="text-sm font-semibold text-stone-900">目前摘要</p>
-            <ul className="mt-3 space-y-2 text-sm leading-7 text-stone-700">
-              <li>顯示筆數：{filteredLogs.length}</li>
-              <li>涉及操作者：{summary.actorCount}</li>
-              <li>涉及階段：{summary.phaseCount}</li>
-              <li>失敗 / 阻塞訊號：{aggregate.failedCount} / {aggregate.blockingChanges}</li>
-              <li>最新紀錄：{summary.latest}</li>
-            </ul>
+            <p className="text-sm font-semibold text-stone-900">這次篩選</p>
+            <div className="mt-3 space-y-2 text-sm text-stone-700">
+              <div className="rounded-2xl bg-stone-50 px-3 py-2.5">
+                <p className="text-[11px] font-semibold text-stone-500">顯示範圍</p>
+                <p className="mt-1 leading-6">{filteredLogs.length} 筆紀錄，涵蓋 {summary.actorCount} 位操作者、{summary.phaseCount} 個階段。</p>
+              </div>
+              <div className="rounded-2xl bg-stone-50 px-3 py-2.5">
+                <p className="text-[11px] font-semibold text-stone-500">最新時間</p>
+                <p className="mt-1 leading-6">{summary.latest}</p>
+              </div>
+            </div>
             {aggregate.actionTypeCounts.length > 0 ? (
               <div className="mt-4 rounded-2xl border border-stone-200 bg-stone-50 p-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-stone-600">最常出現的操作類型</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-stone-600">常見操作</p>
                 <ul className="mt-2 space-y-1 text-xs leading-6 text-stone-700">
                   {aggregate.actionTypeCounts.map(([actionType, count]) => (
                     <li key={actionType} className="flex items-center justify-between gap-3">
-                      <span>{actionTypeLabelWithRawZh(actionType)}</span>
+                      <span title={actionTypeDebugTitleZh(actionType)}>{actionTypeLabelZh(actionType)}</span>
                       <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-stone-700">{count} 次</span>
                     </li>
                   ))}
@@ -344,30 +374,33 @@ export function RoomLogsClient(params: {
         </div>
 
         <div className="rounded-3xl bg-white p-5 shadow-sm">
-          {loading ? <p className="text-sm text-stone-600">正在讀取完整紀錄…</p> : null}
+          {loading ? <p className="text-sm text-stone-600">正在讀取紀錄…</p> : null}
           {errorZh ? <p className="rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700">{errorZh}</p> : null}
-          {!loading && !errorZh && filteredLogs.length === 0 ? <p className="text-sm text-stone-500">目前沒有符合篩選條件的正式回合紀錄。</p> : null}
+          {!loading && !errorZh && filteredLogs.length === 0 ? <p className="text-sm text-stone-500">暫無符合篩選條件的正式紀錄。</p> : null}
           {!loading && !errorZh && filteredLogs.length > 0 ? (
             <div className="space-y-3">
-              {filteredLogs.map((entry) => {
+              <div className="rounded-2xl border border-stone-200 bg-stone-50 px-3 py-2 text-[11px] text-stone-600">
+                先看摘要，再展開需要的紀錄。每筆紀錄會顯示前後狀態與玩家變化。
+              </div>
+              {filteredLogs.map((entry, index) => {
                 const playerDiffs = describePlayerDiff(entry);
                 return (
-                <details key={`${entry.timestamp}-${actionTypeLabelWithRawZh(entry.actionType)}-${entry.actorSeat}-${entry.roomRevision}`} className="rounded-2xl border border-stone-200 bg-stone-50 p-4" open>
+                <details key={`${entry.timestamp}-${actionTypeDebugTitleZh(entry.actionType)}-${entry.actorSeat}-${entry.roomRevision}`} className="rounded-2xl border border-stone-200 bg-stone-50 p-4" open={index === 0}>
                   <summary className="cursor-pointer list-none">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
                         <p className="font-semibold text-stone-900">{entry.resultSummaryZh}</p>
-                        <p className="mt-1 text-xs text-stone-500">{entry.timestamp}｜R{entry.round}｜{phaseLabelZh(entry.phase)}</p>
+                        <p className="mt-1 text-xs text-stone-500">{formatTimestampZh(entry.timestamp, { withYear: true })}｜第 {entry.round} 輪｜{phaseLabelZh(entry.phase)}</p>
                       </div>
                       <div className="flex flex-wrap gap-2 text-[11px]">
                         <span className="rounded-full bg-white px-2 py-1 font-medium text-stone-700">{entry.actorLabelZh}</span>
-                        <span className="rounded-full bg-white px-2 py-1 font-medium text-stone-700">{actionTypeLabelWithRawZh(entry.actionType)}</span>
+                        <span className="rounded-full bg-white px-2 py-1 font-medium text-stone-700" title={actionTypeDebugTitleZh(entry.actionType)}>{actionTypeLabelZh(entry.actionType)}</span>
                       </div>
                     </div>
                     <p className="mt-2 text-sm text-stone-700">{entry.payloadSummaryZh}</p>
                   </summary>
                   <div className="mt-3 grid gap-3 border-t border-stone-200 pt-3 text-xs leading-6 text-stone-700 md:grid-cols-2 xl:grid-cols-4">
-                    <div>
+                    <div className="rounded-2xl bg-white px-3 py-2.5">
                       <p className="font-semibold text-stone-900">前置狀態</p>
                       <p>階段：{phaseLabelZh(entry.statusBefore.phase)}</p>
                       <p>回合：{entry.statusBefore.round}</p>
@@ -375,7 +408,7 @@ export function RoomLogsClient(params: {
                       <p>目前輪到：{entry.statusBefore.activeSeat ?? "—"}</p>
                       <p>阻塞視窗：{blockingLabelZh(entry.statusBefore.blockingWindowKind as "none" | "loss" | "discard" | "ability" | null | undefined)}</p>
                     </div>
-                    <div>
+                    <div className="rounded-2xl bg-white px-3 py-2.5">
                       <p className="font-semibold text-stone-900">後置狀態</p>
                       <p>階段：{phaseLabelZh(entry.statusAfter.phase)}</p>
                       <p>回合：{entry.statusAfter.round}</p>
@@ -383,8 +416,8 @@ export function RoomLogsClient(params: {
                       <p>目前輪到：{entry.statusAfter.activeSeat ?? "—"}</p>
                       <p>阻塞視窗：{blockingLabelZh(entry.statusAfter.blockingWindowKind as "none" | "loss" | "discard" | "ability" | null | undefined)}</p>
                     </div>
-                    <div className="md:col-span-2">
-                      <p className="font-semibold text-stone-900">玩家資源 / 位置變化</p>
+                    <div className="rounded-2xl bg-white px-3 py-2.5 md:col-span-2">
+                      <p className="font-semibold text-stone-900">玩家變化</p>
                       {playerDiffs.length > 0 ? (
                         <div className="mt-2 flex flex-wrap gap-2">
                           {playerDiffs.map((diff) => {
@@ -411,15 +444,6 @@ export function RoomLogsClient(params: {
                       ) : (
                         <p className="mt-1 text-stone-500">這筆操作沒有直接改變玩家的 SR / SP / AP / 位置。</p>
                       )}
-                    </div>
-                    <div className="md:col-span-2">
-                      <p className="font-semibold text-stone-900">解讀提示</p>
-                      <ul className="mt-1 list-disc space-y-1 pl-5">
-                        <li>這筆紀錄適合回看誰在什麼階段做了什麼，是否導致壓力上升、輪次切換或阻塞視窗變化。</li>
-                        <li>若要檢查營火卡住原因，優先看操作類型、阻塞視窗與階段是否停在營火。</li>
-                        <li>若要檢查互助或任務節點，優先搜尋關鍵字 adjacent_help、declare_task、resolve_campfire。</li>
-                        <li>色塊提示：紅色多半代表扣損，綠色代表回復，藍色代表移動。</li>
-                      </ul>
                     </div>
                   </div>
                 </details>
